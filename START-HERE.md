@@ -1,33 +1,41 @@
-# Update your working website
+# Update the working school website
 
-1. Unzip the package. Open the existing GitHub repository → Add file → Upload files.
-2. Upload the CONTENTS of website/ at the repository root, replacing existing files. Commit.
-3. Wait for Vercel to show Ready. Close the installed app and school website tabs, then reopen. Refresh again if an old screen remains.
+No terminal commands are needed.
 
-Keep your working environment variables and database. No new SQL migration is required. Run the earlier supabase/update-002.sql only if the one-bursar update was never applied. Do not rerun schema.sql.
+1. Open Supabase → SQL Editor → New query. Paste website/supabase/update-003.sql and click Run. Keep the existing database. Do not rerun schema.sql. If you never applied update-002.sql, apply that older update first.
+2. Unzip this package. Open the existing GitHub repository → Add file → Upload files. Upload the CONTENTS of website/ at the repository root, replacing the existing files. Commit the change. Keep the repository private because api/data/students.json contains student records.
+3. Wait for Vercel to show Ready. Close the school website and installed app, reopen, and refresh. Keep your existing environment variables.
 
-## School documents
+## Where to find the new features
 
-The forms now use the supplied bilingual field layout, a single subject heading, and only the selected duty verb. The verification address exists inside the QR code but is not printed. Its caption sits directly beneath it.
+Principal → Classes & subjects: add classes, set compulsory subjects, add subjects, and import the supplied Form Five students. Form 2A and Form 2B are already available. Select extra subjects in each student profile. Stream suggestions are editable, not compulsory national combinations. Confirm Sixth Form combinations from the school's register.
 
-Word and print documents request Times New Roman. Direct PDF export asks supported desktop browsers for the locally installed font. Allow font access when prompted. Otherwise Save PDF opens the print dialogue. Choose Save as PDF or Microsoft Print to PDF. Use a computer with Times New Roman installed for exact font output.
+The uploaded CSV has 92 rows: 56 Form 5A and 36 Form 5B. It does not identify these students as Form Two. 87 have unique matricules and are ready for import. Five have no matricule. The import result shows them for completion. 63 birthplaces are missing and remain blank. Repeating the import skips matching existing matricules and flags conflicting names.
 
-If a website address appears at the bottom of browser printing, open More settings and turn OFF Headers and footers. That extra footer is controlled by your browser.
+Principal → Students: choose a class, then choose the student's name. Use Change student status or class to transfer, promote, demote, dismiss, or reinstate. The record and movement history remain available.
 
-Existing attestations receive the revised layout when reprinted. Stored names, references, dates and verification tokens are preserved. New links use /verify/code. Old /#verify/code links still work.
+Principal → Marks & report cards: select the academic year and class, then Load marks. Draft and published marks are shown. Publish checked marks before generating report cards or the master result sheet. Use the output selector for either format. Individual cards use A4. The wide master sheet uses A3 landscape. Use Print → Save as PDF to download reports.
 
-## Calendar activities
+Teachers → Document requests: request an attestation or employment confirmation. Principal → Document requests: prepare, issue or decline it. Principal → School documents also includes official letters, circulars, invitations, announcements, permissions and recommendations on the school letterhead.
 
-Twenty clearly dated activities appear on the website after deployment. Five entries with unclear dates remain drafts.
+Teachers → Learning centre: type notes or attach a PDF under 2 MB. Teachers belong to a department and must have a matching subject/class assignment. The HOD reviews their own department's resources. Add questions to a quiz/test and set its duration. MCQ and true/false are auto-scored. Written answers are marked by the teacher. These assessment scores are separate from official sequence marks and must be reviewed and entered in Marks before report publication.
 
-To manage them: Principal or VP → Website publishing → Import supplied activities → Import activities. This imports all 25 entries. Open the five drafts, confirm their dates and publish them. Repeating the import skips source IDs already loaded in the portal. Refresh first after an interrupted import.
+Principal → AI settings: select Gemini, Grok, Groq, OpenRouter, Cerebras, SambaNova or Hugging Face, then paste the API key. There is no model field. Free allowances depend on the provider and account. OpenRouter uses its free-model router. Other providers may charge after credits or free allowances are exhausted.
 
-## Homepage, departments and students
+## Documents and fonts
 
-The homepage now includes the principal’s original welcome message. All 16 departments have English and French descriptions. Under Students, choose the class, then a student by name or matricule to display the record.
+Outfit is bundled for the interface. Tinos regular and bold are bundled for school documents and embedded in PDF/Word exports. Tinos is a freely redistributable Times-compatible font, not Microsoft's Times New Roman. The package does not require access to fonts installed on a computer. Font licences are in public/fonts/.
 
-Teachers’ phone numbers already serve as their WhatsApp numbers. The separate WhatsApp field is optional and overrides the phone number only when filled.
+Verification links are encoded inside the QR code. No visible verification URL is printed. The caption sits below the QR. Disable Headers and footers in browser print settings if the browser adds its own website address. Direct attestation PDF export does not add a browser address.
 
-Normal page addresses replace the # navigation on the live site. The standalone local preview uses its own local navigation.
+## Data still needed
 
-Installation remains available: Install app in Chrome or Edge. On iPhone use Safari → Share → Add to Home Screen. Login and school records require internet.
+student-scores-export-academia.xls is an HTML web-export wrapper pointing to a missing student-scores-export-academia_files/sheet001.htm. It contains no score table to import. Upload a genuine .xlsx export or the complete accompanying folder. No scores or Sixth Form combinations were invented from that file.
+
+The supplied report's Grade and Rank headings were reversed relative to their values. This update puts letter grades under Grade and numeric positions under Rank. Teachers enter letter grades under the school's policy. Unconfirmed pass thresholds, annual weighting and promotion decisions are not calculated automatically.
+
+## Checks before school-wide use
+
+Read AUDIT.md for the completed checks and remaining live checks. This ZIP has not been deployed to your accounts. Test one teacher request, one HOD approval, one student test and one printed report after deployment. The browser preview infrastructure was unavailable during this update.
+
+Install on Android/computer from Chrome or Edge → Install app. On iPhone use Safari → Share → Add to Home Screen. Login, assessments and private records require internet.

@@ -192,6 +192,6 @@ Multiple holders are allowed for staff posts except the bursar, who has a databa
 
 ## September document and content revision
 
-See START-HERE.md for this update. Attestations now follow the original bilingual field layout in Times New Roman, with one heading and a compact QR caption underneath. No verification URL is printed in the document body. Word uses the named local font. PDF export uses local Times New Roman through supported browsers, falling back to browser Print/Save as PDF if unavailable. A computer with Times New Roman is required for exact font output. The render environment substitutes its installed serif font for QA only. No substituted font is bundled as Times New Roman.
+See START-HERE.md for this update. Attestations follow the original bilingual field layout with one heading and a compact QR caption underneath. Fonts are bundled: Outfit for the interface and Tinos regular/bold for documents. Tinos is a freely redistributable Times-compatible font, not Microsoft Times New Roman. PDF and Word exports embed the document fonts. See START-HERE.md and AUDIT.md for this update and current verification limits.
 
 Clean URL rewrites preserve old hash links. Student records are displayed after class and student selection. Sixteen bilingual department descriptions and the original principal welcome are included. The activities photo was transcribed into 20 dated public entries and five undated drafts requiring school review. Calendar dates follow the supplied school schedule, including its November term boundary.

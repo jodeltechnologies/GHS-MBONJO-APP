@@ -1,0 +1,18 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {enrolment,academicYear,availableSubjects} from '../src/academics.js';
+import {studies,validateRecord} from '../src/domain.js';
+import {validateQuestions,publicQuestions,gradeAttempt,acceptAnswers} from '../src/exams.js';
+import {canRead,canWrite} from '../src/access.js';
+import students from '../api/data/students.json' with {type:'json'};
+const questions=validateQuestions([{type:'mcq',prompt:'Choose 4',options:['3','4'],correct:1,points:2},{type:'truefalse',prompt:'Earth is a planet',correct:0,points:1},{type:'essay',prompt:'Explain',points:7}]);
+test('compulsory subjects stay enrolled alongside individual cross-stream extras',()=>{const p=enrolment({class:'Form 5B',subjects:['Physics']},[{kind:'classroom',data:{name:'Form 5B',subjects:['English Language','History']}}]);assert.ok(studies(p,'History'));assert.ok(studies(p,'Physics'));assert.equal(studies(p,'Chemistry'),false);});
+test('empty configured class does not silently grant all subjects',()=>assert.equal(studies(enrolment({class:'Form 2A',subjects:[]},[{kind:'classroom',data:{name:'Form 2A',subjects:[]}}]),'Physics'),false));
+test('exam answer keys are removed while question types and points remain',()=>{const safe=publicQuestions(questions);assert.ok(safe.every(q=>!('correct' in q)));assert.equal(safe[2].points,7);});
+test('mixed assessments auto-score only objective questions',()=>assert.deepEqual(gradeAttempt(questions,{'1':'1','2':'0','3':'An answer'}),{autoScore:3,total:10,manualRequired:true}));
+test('unanswered MCQ is not treated as option zero',()=>assert.equal(gradeAttempt(questions,{'2':''}).autoScore,0));
+test('server deadline rejects late edits and preserves last saved answers',()=>{const a={status:'in_progress',questions,answers:{'1':'0'},deadline:'2026-09-09T10:00:00Z'};assert.deepEqual(acceptAnswers(a,{'1':'1'},Date.parse(a.deadline)),a.answers);assert.equal(acceptAnswers(a,{'1':'1'},Date.parse(a.deadline)-1)['1'],'1');assert.throws(()=>acceptAnswers({...a,status:'submitted'},{},0));});
+test('malformed questions and out-of-range answer keys are rejected',()=>{assert.throws(()=>validateQuestions([{type:'mcq',prompt:'x',points:1,options:['a','b'],correct:4}]));assert.throws(()=>validateQuestions([{type:'essay',prompt:'x',points:-1}]));});
+test('document requests are visible only to requester and principal',()=>{const r={kind:'document_request',data:{requesterId:'t1',status:'pending'}};assert.equal(canRead({id:'t2',role:'teacher'},r,[]),false);assert.equal(canRead({id:'v1',role:'vp'},r,[]),false);assert.ok(canRead({id:'p',role:'principal'},r,[]));assert.ok(canWrite({id:'t1',role:'teacher'},'document_request',{status:'cancelled'},r,[]));assert.equal(canWrite({id:'t2',role:'teacher'},'document_request',{status:'cancelled'},r,[]),false);});
+test('supplied class import preserves 87 unique assigned matricules and actual Form Five labels',()=>{assert.equal(students.length,92);assert.equal(students.filter(s=>!s.matricule).length,5);assert.equal(new Set(students.filter(s=>s.matricule).map(s=>s.matricule)).size,87);assert.equal(students.filter(s=>s.class==='Form 5A').length,56);assert.equal(students.filter(s=>s.class==='Form 5B').length,36);students.filter(s=>s.matricule).forEach(s=>validateRecord('student',s));});
+test('academic-year boundary and subject catalogue override',()=>{assert.equal(academicYear(new Date('2026-08-31')),'2025/2026');assert.equal(academicYear(new Date('2026-09-01')),'2026/2027');assert.equal(availableSubjects([{kind:'subject',data:{name:'Physics',coefficient:3,department:'Physics'}}]).find(s=>s.name==='Physics').coefficient,3);});

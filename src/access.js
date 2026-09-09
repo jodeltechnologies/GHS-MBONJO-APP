@@ -1,9 +1,13 @@
+import {requestingStaff} from './document-requests.js';
 import {studies} from './domain.js';
 export const admin=p=>['principal','vp'].includes(p.role);
 export const teacher=p=>['teacher','hod'].includes(p.role);
 export const assigned=(p,d,all)=>all.some(r=>r.kind==='assignment'&&r.data.teacherId===p.id&&r.data.class===d.class&&(!d.subject||r.data.subject===d.subject));
 export function canRead(p,r,all){const d=r.data;
  if(p.role==='principal')return true;
+ if(r.kind==='document_request')return d.requesterId===p.id;
+ if(['classroom','subject'].includes(r.kind))return true;
+ if(r.kind==='exam_attempt')return admin(p)||d.studentId===p.id||teacher(p)&&all.some(x=>x.id===d.resourceId&&x.data.ownerId===p.id);
  if(p.role==='vp')return true;
  if(r.kind==='profile')return r.id===p.id;
  if(['event','post','gallery','textbook'].includes(r.kind))return d.status==='published'||((p.role==='content_creator'||p.contentCreator===true)&&d.ownerId===p.id);
@@ -18,6 +22,9 @@ export function canRead(p,r,all){const d=r.data;
 }
 export function canWrite(p,kind,d,old,all){
  if(p.role==='principal')return true;
+ if(['classroom','subject'].includes(kind))return p.role==='vp';
+ if(kind==='exam_attempt')return false;
+ if(kind==='document_request')return requestingStaff(p)&&(!old||old.data.requesterId===p.id&&old.data.status==='pending'&&d.status==='cancelled');
  if(kind==='profile')return old?.id===p.id; // protected fields are separately immutable
  if(kind==='document')return false;
  if(p.role==='vp')return !['profile','document'].includes(kind);

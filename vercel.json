@@ -22,11 +22,21 @@
           "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
         }
       ]
+    },
+    {
+      "source": "/:page(portal|login|verify)(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
     }
   ],
   "functions": {
     "api/school.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "api/data/**"
     }
   },
   "rewrites": [

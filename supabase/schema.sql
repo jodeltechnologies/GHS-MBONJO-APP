@@ -1,7 +1,7 @@
 -- Run once in the Supabase SQL Editor. No command line required.
 create table public.school_records (
  id uuid primary key default gen_random_uuid(),
- kind text not null check(kind in ('profile','student','assignment','resource','submission','attendance','mark','event','post','gallery','textbook','document','timetable')),
+ kind text not null check(kind in ('profile','student','assignment','resource','submission','attendance','mark','event','post','gallery','textbook','document','timetable','document_request','classroom','subject','exam_attempt')),
  data jsonb not null,
  version integer not null default 1,
  created_at timestamptz not null default now()
@@ -33,10 +33,18 @@ end;$$;
 revoke execute on function public.school_rate_limit(text) from public,anon,authenticated;
 grant execute on function public.school_rate_limit(text) to service_role;
 -- Save the record and its audit entry in one transaction.
-create function public.school_save_record(record_kind text, record_data jsonb, actor_id text, record_id uuid default null, expected_version integer default null)
+create or replace function public.school_save_record(record_kind text, record_data jsonb, actor_id text, record_id uuid default null, expected_version integer default null)
 returns setof public.school_records language plpgsql security definer set search_path=public as $$
-declare saved public.school_records;
+declare saved public.school_records; request_row public.school_records;
 begin
+ if record_kind='document' and record_id is null and record_data->>'requestId' is not null then
+  select * into request_row from school_records where id=(record_data->>'requestId')::uuid and kind='document_request' for update;
+  if not found or request_row.data->>'status'<>'pending' then raise exception 'Request no longer pending.' using errcode='40001'; end if;
+ end if;
+ if record_kind='document_request' and record_id is not null then
+  perform 1 from school_records where id=record_id for update;
+  if exists(select 1 from school_records where kind='document' and data->>'requestId'=record_id::text and data->>'status'='issued') then raise exception 'Request already issued.' using errcode='40001'; end if;
+ end if;
  if record_id is null then
   insert into school_records(kind,data) values(record_kind,record_data) returning * into saved;
  else
@@ -58,3 +66,9 @@ grant execute on function public.school_save_record(text,jsonb,text,uuid,integer
 create unique index if not exists one_active_bursar
 on public.school_records ((data->>'role'))
 where kind='profile' and data->>'role'='bursar' and coalesce(data->>'active','true')<>'false';
+
+CREATE UNIQUE INDEX IF NOT EXISTS one_issued_document_per_request ON public.school_records ((data->>'requestId')) WHERE kind='document' AND data->>'status'='issued' AND data->>'requestId' IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS unique_classroom ON public.school_records ((data->>'name')) WHERE kind='classroom';
+CREATE UNIQUE INDEX IF NOT EXISTS unique_subject ON public.school_records ((data->>'name')) WHERE kind='subject';
+CREATE UNIQUE INDEX IF NOT EXISTS unique_exam_attempt ON public.school_records ((data->>'studentId'),(data->>'resourceId')) WHERE kind='exam_attempt';
