@@ -51,3 +51,10 @@ grant execute on function public.school_save_record(text,jsonb,text,uuid,integer
 -- BOOTSTRAP AFTER creating the principal's email/password in Authentication > Users:
 -- insert into public.school_records(kind,data) values ('profile',jsonb_build_object(
 -- 'authId','PASTE_AUTH_USER_UUID','name','David Moki Ndive','role','principal','active',true));
+
+-- Existing installations: run this once in Supabase SQL Editor.
+-- No uniqueness constraint is applied to VP, SDM, DM or HOD posts.
+-- This index handles simultaneous requests as well as ordinary form validation.
+create unique index if not exists one_active_bursar
+on public.school_records ((data->>'role'))
+where kind='profile' and data->>'role'='bursar' and coalesce(data->>'active','true')<>'false';

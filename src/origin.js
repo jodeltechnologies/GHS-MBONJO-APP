@@ -1,0 +1,2 @@
+function origin(value){try{const u=new URL(value);if(!['https:','http:'].includes(u.protocol)||u.username||u.password||u.pathname!=='/'||u.search||u.hash)return null;return u.origin;}catch{return null;}}
+export function trustedOrigin(value,env=process.env){const incoming=origin(value);if(!incoming)return false;const allowed=[origin(env.APP_ORIGIN)];if(env.VERCEL==='1')for(const key of ['VERCEL_URL','VERCEL_PROJECT_PRODUCTION_URL','VERCEL_BRANCH_URL'])if(env[key])allowed.push(origin('https://'+env[key]));return allowed.includes(incoming);}

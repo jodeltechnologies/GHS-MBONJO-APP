@@ -4,6 +4,10 @@ This is an initial implementation for **GitHub + Vercel + Supabase**. It include
 
 No command line is needed for the setup below. Vercel runs the supplied build automatically.
 
+## Updating an existing deployment
+
+Read START-HERE.md first. It gives the login fix, one SQL update and browser-only upload steps. Existing deployments must run only supabase/update-002.sql, not the full schema.
+
 ## Start with the package
 
 - `website/`: the project to upload to a **private GitHub repository**.
@@ -87,14 +91,14 @@ Staff and parent accounts use passwords. Sessions are HTTP-only, secure cookies 
 |---|---|
 | Principal | All implemented non-financial functions, profiles, appointments, account creation, attestation issuance/revocation, AI keys, publishing and activity log |
 | VP | Academic administration, classes and teacher assignments, student records, attendance, marks, reports, timetable and AI drafting; no HOD appointments or attestation issuance |
-| HOD | Own teaching functions and approval of resources in their department |
+| HOD | Own teaching functions, approval of department resources, AI writing and department colleague contacts |
 | Teacher | Own profile; assigned classes/subjects; phone roll call; notes, quizzes, assignments, homework, marks and feedback on their students' submissions |
 | Discipline | Student attendance and lesson roll call |
 | Content creator | Own school posts, events, gallery entries and textbook entries |
 | Student | Published, enrolled-class learning resources; own submissions, feedback, attendance and published marks/reports |
 | Parent | Only linked children's attendance and published marks/reports |
 
-There is no finance module, fee collection, payment processing or financial role. Salary index is retained only as a requested staff/document field.
+The bursar post is available, with only one active appointee. There is no finance module, fee collection or payment processing. The principal has no financial operations. Salary index is retained only as a requested staff/document field.
 
 ### Learning and attendance
 
@@ -125,7 +129,7 @@ There is no finance module, fee collection, payment processing or financial role
 - Issued records are immutable except for revocation. To correct an issued document, revoke it and issue a new reference.
 - The QR record verifies the register entry; it does not cryptographically certify that every visible word of a printed sheet is unchanged. Staff must compare the verification result with the document.
 - No signature or stamp is copied from the samples. Print and sign/stamp through the school's normal process.
-- Browser **Print → Save as PDF** is supported. Disable browser headers/footers and use A4. Print layout has not been visually verified in a connected browser during this build.
+- Direct DOCX and PDF downloads are provided for attestations and AI letters, including bulk attestations. A generated sample was rendered and reviewed. Browser **Print → Save as PDF** is also supported. Disable browser headers/footers and use A4. Print layout has not been visually verified in a connected browser during this build.
 
 ### Timetable
 
@@ -141,13 +145,13 @@ There is no finance module, fee collection, payment processing or financial role
 
 ### AI writing
 
-The principal can configure Gemini, Grok or Groq, select an available model ID and save an encrypted key. The principal/VP can enter confirmed facts, paste a writing guide, choose English/French, generate a draft, edit it and use it as an announcement. Nothing publishes automatically.
+The principal can configure Gemini, Grok or Groq, select an available model ID and save an encrypted key. The principal, VPs and HODs can enter confirmed facts, paste a writing guide, choose English/French, generate a draft, edit it and use it as an announcement. Nothing publishes automatically.
 
-The promised writing guide was not included in the message, so the app has a place to paste it rather than inventing it. Provider charges, available models and quotas depend on the account. No provider is represented as guaranteed free.
+The supplied writing rules are automatically applied to every AI draft, with an optional additional guide. Principal, VPs and HODs can select a department and colleague, review the number and text, then open WhatsApp. HOD contacts are restricted to their own department. The sender presses Send in WhatsApp. No WhatsApp API is used. Provider charges, available models and quotas depend on the account. No provider is represented as guaranteed free.
 
 ## Verification performed and remaining work
 
-Passed: JavaScript build and 15 focused automated checks for authentication gate failures, role boundaries, enrolled subjects, timetable overlaps/boundaries, promotion eligibility, mark calculations and duty wording.
+Passed: JavaScript build and 21 focused automated checks for authentication gate failures, role boundaries, enrolled subjects, timetable overlaps/boundaries, promotion eligibility, mark calculations and duty wording.
 
 Not performed: a live Supabase migration, actual sign-in/account provisioning, multiuser concurrency, provider-key encryption round trip against Supabase, AI requests, email deliverability (no email is sent), Vercel deployment, real-device/browser UI review, or printed/PDF layout review. The database migration and external calls remain unverified until the accounts are connected.
 
@@ -161,7 +165,7 @@ This is an initial implementation for review, not a claim that the full school p
 - AI keys are encrypted with AES-256-GCM, never returned to the browser. Keep `KEY_ENCRYPTION_SECRET` stable; changing it makes stored provider keys unreadable until re-entered.
 - The repository contains no school accounts, staff roster, student roster or secrets in public assets. Production records are loaded after authentication.
 - Photographs are currently stored as limited-size image data in protected records. A private object-storage layer and paginated resource/roster queries should be added before large-scale photo or multi-year use. Core-record queries are bounded at 50,000 rows rather than silently truncating them.
-- The API origin must match `APP_ORIGIN`. SameSite cookies, request-origin checks, output escaping, an allowlisted image format and security headers are included.
+- The API origin must match normalized `APP_ORIGIN` or a domain supplied by Vercel system environment variables. Request Host headers are not trusted as configuration. SameSite cookies, request-origin checks, output escaping, an allowlisted image format and security headers are included.
 - Login/AI/verification rate limiting is stored in PostgreSQL. Configure Vercel-level request protection before a public rollout, since network limits are also needed against distributed traffic.
 
 ## Primary implementation references
@@ -172,3 +176,16 @@ This is an initial implementation for review, not a claim that the full school p
 - [Gemini generateContent](https://ai.google.dev/api/generate-content)
 - [Grok chat completions](https://docs.x.ai/developers/rest-api-reference/inference/chat-completions)
 - [Groq API reference](https://console.groq.com/docs/api-reference)
+
+## Installation, posts and backups
+
+The web manifest, install button and service worker enable browser installation on supported devices. The offline cache is restricted to public static assets. Login, records and document verification need internet.
+
+The principal can export an encrypted PC backup using AES-256-GCM and a separate backup password. It includes school records and audit entries, excludes Auth passwords, provider secrets and deployment settings, and reads pages rather than a transactional snapshot. Pause editing while exporting. No automatic restore screen is included.
+
+Multiple holders are allowed for staff posts except the bursar, who has a database-enforced single active appointment. The app catalogue lists school services from Cameroon Decree 2001/041, articles 27 and 32–45, alongside clearly labelled optional duties and support jobs. This is not a claim to list every current ministry-wide appointment or every institution-specific staffing entitlement. See STAFF-POSTS.md.
+
+- [Cameroon Decree 2001/041, UNESCO-hosted copy](https://media.unesco.org/sites/default/files/webform/r2e002/39f683f18e61d0287d2b8380e68948efe6db252a.pdf)
+- [WhatsApp click to chat](https://faq.whatsapp.com/5913398998672934)
+- [Vercel system environment variables](https://vercel.com/docs/environment-variables/system-environment-variables)
+- [Browser installation requirements](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable)
