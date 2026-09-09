@@ -1,45 +1,33 @@
-# Update your existing GHS Mbonjo website
+# Update your working website
 
-You do not need a terminal. Keep your existing Supabase project, accounts and Vercel project.
+1. Unzip the package. Open the existing GitHub repository → Add file → Upload files.
+2. Upload the CONTENTS of website/ at the repository root, replacing existing files. Commit.
+3. Wait for Vercel to show Ready. Close the installed app and school website tabs, then reopen. Refresh again if an old screen remains.
 
-## 1. Fix the login error now
+Keep your working environment variables and database. No new SQL migration is required. Run the earlier supabase/update-002.sql only if the one-bursar update was never applied. Do not rerun schema.sql.
 
-Open Vercel → your project → Settings → Environment Variables.
-Find APP_ORIGIN and set its Production value to:
+## School documents
 
-https://ghs-mbonjo-app.vercel.app
+The forms now use the supplied bilingual field layout, a single subject heading, and only the selected duty verb. The verification address exists inside the QR code but is not printed. Its caption sits directly beneath it.
 
-Save. Open Deployments → the latest production deployment → three-dot menu → Redeploy.
-Open the school website again. This fixes the displayed “Untrusted request origin” error when the setting was missing or different. It does not change your email or password.
+Word and print documents request Times New Roman. Direct PDF export asks supported desktop browsers for the locally installed font. Allow font access when prompted. Otherwise Save PDF opens the print dialogue. Choose Save as PDF or Microsoft Print to PDF. Use a computer with Times New Roman installed for exact font output.
 
-## 2. Install this update
+If a website address appears at the bottom of browser printing, open More settings and turn OFF Headers and footers. That extra footer is controlled by your browser.
 
-1. Unzip this package on your computer.
-2. Open your existing private GitHub repository. Choose Add file → Upload files.
-3. Drag the CONTENTS of the website folder into the repository root, replacing existing files. Keep api, src, public and supabase as folders. Do not upload the ZIP itself or the enclosing website folder. Commit changes.
-4. In Supabase → SQL Editor, paste the contents of website/supabase/update-002.sql and click Run. This adds the one-active-bursar rule without resetting records. Do not rerun schema.sql on your existing database.
-5. Vercel deploys the GitHub update automatically. Wait for Ready, then reopen the website. If an installed app still shows the old version, close every app window and reopen it.
+Existing attestations receive the revised layout when reprinted. Stored names, references, dates and verification tokens are preserved. New links use /verify/code. Old /#verify/code links still work.
 
-Keep all existing environment variables. Never put keys or private-imports into public website files. If the GitHub repository is already linked, there is no need to create another project.
+## Calendar activities
 
-## 3. Install on a phone or computer
+Twenty clearly dated activities appear on the website after deployment. Five entries with unclear dates remain drafts.
 
-Open the deployed HTTPS website and select “Install app / Installer”.
+To manage them: Principal or VP → Website publishing → Import supplied activities → Import activities. This imports all 25 entries. Open the five drafts, confirm their dates and publish them. Repeating the import skips source IDs already loaded in the portal. Refresh first after an interrupted import.
 
-- Android, Windows or Linux: use Chrome or Edge and confirm installation. If no prompt appears, use the browser menu → Install app or Add to Home screen.
-- iPhone or iPad: open Safari → Share → Add to Home Screen.
-- Other desktop browsers: use their installation option if available, or open the website normally.
+## Homepage, departments and students
 
-The icon opens the same school website. Login and school records require internet access. Private responses, passwords and documents are not placed in the offline cache.
+The homepage now includes the principal’s original welcome message. All 16 departments have English and French descriptions. Under Students, choose the class, then a student by name or matricule to display the record.
 
-## What changed
+Teachers’ phone numbers already serve as their WhatsApp numbers. The separate WhatsApp field is optional and overrides the phone number only when filled.
 
-- Multiple VP, SDM, DM and HOD appointments. Only one active bursar, enforced in the database. End the existing bursar appointment before appointing another.
-- Expanded bilingual staff-post catalogue, with official core services separated from optional school duties and support jobs.
-- Your writing rules automatically guide AI drafts. Principal, VPs and HODs have access.
-- Department/contact selection opens WhatsApp with the reviewed message. You press Send in WhatsApp. No WhatsApp API is needed.
-- Word (.docx), PDF and direct printing for attestations and AI letters. Bulk attestation exports include verification QR codes.
-- Principal-only encrypted backup download to the PC. Keep the backup password. It exports records and audit entries, not Auth passwords, AI keys or hosting settings. Pause editing during export. Automated database restoration is not included.
-- Browser installation and safer origin matching for configured Vercel domains.
+Normal page addresses replace the # navigation on the live site. The standalone local preview uses its own local navigation.
 
-For a brand-new deployment, follow website/README.md, starting at “Browser-only setup”. For the existing deployment, use only the steps above.
+Installation remains available: Install app in Chrome or Edge. On iPhone use Safari → Share → Add to Home Screen. Login and school records require internet.

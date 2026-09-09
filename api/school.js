@@ -23,7 +23,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
  const b=typeof req.body==='string'?JSON.parse(req.body):req.body||{};if(JSON.stringify(b).length>3500000)fail('Upload exceeds 3 MB.',413);
  const op=b.op;
  if(op==='logout'){cookie(res,'',0);return res.json({ok:true});}
- if(op==='public'){const rows=await db('school_records?select=*&kind=in.(event,post,gallery,textbook)&data->>status=eq.published');return res.json({rows});}
+ if(op==='public'){const rows=await db('school_records?select=*&kind=in.(event,post,gallery,textbook)&data->>status=eq.published');const imported=await db('school_records?select=data&kind=eq.event&data->>sourceId=like.calendar-2026-*');return res.json({rows,calendarOverrides:imported.map(r=>r.data.sourceId)});}
  if(op==='verify'){await rate(req,'verify',60);if(!/^[a-f0-9]{48}$/.test(b.token||''))fail('Document not found.',404);const rows=await db(`school_records?kind=eq.document&data->>token=eq.${b.token}`);const d=rows[0]?.data;if(!d)fail('Document not found.',404);return res.json({document:{name:d.name,reference:d.reference,kind:d.kind,issueDate:d.issueDate,status:d.status}});}
  if(op==='login'){
   await rate(req,'login');

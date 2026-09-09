@@ -27,7 +27,7 @@ export function attestationText(d){if(d.issuedBody)return d.issuedBody;const ver
 export function validateRecord(kind,d){
  const required={student:['name','matricule','class','gender','birthDate','birthPlace'],profile:['name'],assignment:['teacherId','class','subject','department','periods'],resource:['title','class','subject','department','type','body','submissionMode'],event:['title','date','body'],post:['title','category','body'],gallery:['title','department','image'],textbook:['title','class','subject'],attendance:['studentId','class','date','status','assignmentId'],mark:['studentId','class','subject','assessment','year','mark','coefficient'],submission:['resourceId','body'],document:['name','matricule','kind','principal','rank','salaryIndex','decision','dutyDate','issueDate','reference','position']};
  if(!required[kind]&& !['timetable'].includes(kind))throw Error('Unknown record type.');
- for(const k of required[kind]||[])if(d[k]===undefined||d[k]===null||String(d[k]).trim()==='')throw Error(`${k} is required.`);
+ for(const k of required[kind]||[])if(!(kind==='event'&&k==='date'&&d.status==='draft')&&(d[k]===undefined||d[k]===null||String(d[k]).trim()===''))throw Error(`${k} is required.`);
  if(d.class&&!classes.includes(d.class))throw Error('Invalid class.');
  if(kind==='student'){d.matricule=normalizeMatricule(d.matricule);if(!/^\d{4}-\d{2}-\d{2}$/.test(d.birthDate)||!Number.isFinite(Date.parse(d.birthDate)))throw Error('Use YYYY-MM-DD for date of birth.');}
  if(kind==='attendance'&&!['present','absent','late','excused'].includes(d.status))throw Error('Invalid attendance status.');

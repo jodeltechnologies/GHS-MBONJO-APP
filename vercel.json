@@ -28,5 +28,23 @@
     "api/school.js": {
       "maxDuration": 60
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/home",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/:page(about|departments|news|visits|calendar|gallery|textbooks|admissions|contact|verify|login|portal)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/department/:name",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/verify/:token",
+      "destination": "/index.html"
+    }
+  ]
 }

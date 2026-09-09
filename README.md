@@ -75,7 +75,7 @@ Use separate environment values and a separate Supabase project for a test deplo
 6. Add parent profiles and select only their own children in the linked-student picker. Then create their logins.
 7. Import the original Form One CSV under **Students**. Choose the intended source date format, then inspect the converted dates before confirming. Blank lines before the header are handled.
 8. Add teachers' subject/class assignments and weekly period requirements. Add individual subject enrolments for students who do not take every class subject. Leave that field blank only when the student takes all class subjects.
-9. Publish approved events, textbook lists, department photos and current notices. The uploaded calendar image needs a legible transcription/review before current activities are published.
+9. Publish approved events, textbook lists, department photos and current notices. Twenty dated activities are included from the supplied calendar. Import supplied activities under Website publishing to edit them and review five undated draft entries.
 
 ### Matricule normalization and student access
 
@@ -151,7 +151,7 @@ The supplied writing rules are automatically applied to every AI draft, with an 
 
 ## Verification performed and remaining work
 
-Passed: JavaScript build and 21 focused automated checks for authentication gate failures, role boundaries, enrolled subjects, timetable overlaps/boundaries, promotion eligibility, mark calculations and duty wording.
+Passed: JavaScript build and 24 focused automated checks for authentication gate failures, role boundaries, enrolled subjects, timetable overlaps/boundaries, promotion eligibility, mark calculations and duty wording.
 
 Not performed: a live Supabase migration, actual sign-in/account provisioning, multiuser concurrency, provider-key encryption round trip against Supabase, AI requests, email deliverability (no email is sent), Vercel deployment, real-device/browser UI review, or printed/PDF layout review. The database migration and external calls remain unverified until the accounts are connected.
 
@@ -189,3 +189,9 @@ Multiple holders are allowed for staff posts except the bursar, who has a databa
 - [WhatsApp click to chat](https://faq.whatsapp.com/5913398998672934)
 - [Vercel system environment variables](https://vercel.com/docs/environment-variables/system-environment-variables)
 - [Browser installation requirements](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable)
+
+## September document and content revision
+
+See START-HERE.md for this update. Attestations now follow the original bilingual field layout in Times New Roman, with one heading and a compact QR caption underneath. No verification URL is printed in the document body. Word uses the named local font. PDF export uses local Times New Roman through supported browsers, falling back to browser Print/Save as PDF if unavailable. A computer with Times New Roman is required for exact font output. The render environment substitutes its installed serif font for QA only. No substituted font is bundled as Times New Roman.
+
+Clean URL rewrites preserve old hash links. Student records are displayed after class and student selection. Sixteen bilingual department descriptions and the original principal welcome are included. The activities photo was transcribed into 20 dated public entries and five undated drafts requiring school review. Calendar dates follow the supplied school schedule, including its November term boundary.
