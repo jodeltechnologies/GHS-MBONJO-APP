@@ -2,7 +2,23 @@
 
 No terminal commands are needed.
 
-## This update: timetable preferences
+## This update: analytics
+
+A new **Analytics** tab. Choose a period, then read what the records actually say. Figures cover only the classes you are allowed to see: the principal and VP see the whole school, a teacher or head of department sees their own classes, and discipline staff see attendance.
+
+**Attendance** — the rate overall and by class, week by week, by day of the week and by period of the day, with a girls-and-boys split. A dashed line marks the 80% target and anything below it is flagged.
+
+**Watchlist** — the students who have fallen below the target, worst first, with their absences and lateness. A student with only a lesson or two on record is left out, because one absence out of two lessons is 50% and means nothing.
+
+**Results** — average and pass rate per subject and per class, the spread of marks across bands, and progress across the sequences. Only published marks are counted; a draft is a teacher's working note, not a result.
+
+**Roll-call coverage** — how many of the timetabled lessons actually had a register taken, by class and by teacher. Read this first: without it, a class nobody records looks exactly like a class with perfect attendance.
+
+Two rules run through all of it. A missing record is never counted as a zero — a class with no roll call shows "no records", not 0%, and a blank mark is not a fail. And school days are inferred from the register rather than assumed: a weekday on which nobody anywhere took a roll call is treated as a holiday, so the school is never marked down for not teaching at Christmas. The trade-off is that a day the whole school forgot the register is invisible, which the tab says on the page.
+
+Use **Print** for a paper copy. No SQL and no new environment variables — the tab reads records that are already there.
+
+## Previous update: timetable preferences
 
 Principal → Timetable now opens with a **Timetable preferences** panel. Set the rules, then generate. Whatever you used is saved with the timetable and reopens here next time, so you are never starting from scratch.
 
@@ -65,7 +81,8 @@ If a student is told their record has no date of birth, open **Principal → Stu
 2. Unzip this package. Open the existing GitHub repository → Add file → Upload files. Upload the CONTENTS of website/ at the repository root, replacing the existing files. Commit the change. Keep the repository private because api/data/students.json contains student records.
 3. Wait for Vercel to show Ready. Close the school website and installed app, reopen, and refresh. Keep your existing environment variables.
 4. Test the student sign-in: open the portal, choose **Student**, enter one student's matricule and that student's date of birth. A wrong date must be refused.
-5. Open Principal → Timetable. Set the preferences — closing time, latest period, the per-subject and per-teacher rows — then generate. Check one class sheet and one teacher sheet before printing for the school.
+5. Open Analytics, choose a period of a few weeks and check the figures against what you know. Roll-call coverage tells you how far to trust the rest.
+6. Open Principal → Timetable. Set the preferences — closing time, latest period, the per-subject and per-teacher rows — then generate. Check one class sheet and one teacher sheet before printing for the school.
 
 ## Where to find the new features
 

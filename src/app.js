@@ -1,4 +1,5 @@
 import {subjectCatalogue,availableSubjects,recommendSubjects,academicYear,competency} from './academics.js';
+import {barChart,columnChart,lineChart,statTile,figureTable,shorten} from './charts.js';
 import {providers} from './providers.js';
 import {requestTypes,officialTypes,requestingStaff,requestState} from './document-requests.js';
 import {documentTitles,documentLines,letterheadEN,letterheadFR,displayDate} from './document-layout.js';
@@ -27,6 +28,10 @@ const navigate=path=>{if(globalThis.SCHOOL_PREVIEW){location.hash=path;render();
 let importConflicts=[];
 let studentClass='',studentSelection='',marksYear=academicYear(),marksClass='';
 let ttClass='',ttTeacher='';
+// Analytics is fetched on demand — the range can cover a whole year, far more
+// attendance than the dashboard's own 30-day window.
+const monthsAgo=n=>{const d=new Date();d.setUTCMonth(d.getUTCMonth()-n);return d.toISOString().slice(0,10);};
+let anFrom=monthsAgo(3),anTo=new Date().toISOString().slice(0,10),anClass='',anYear=academicYear(),anReport=null,anScope='',anBusy=false,anError='';
 const link=(label,path,cls='')=>`<a class="${cls}" href="/${path==='home'?'':path}">${label}</a>`;
 function heading(kicker,title,copy=''){return `<div class="section-heading"><p class="eyebrow">${kicker}</p><h1>${title}</h1>${copy?`<p class="muted">${copy}</p>`:''}</div>`;}
 const empty=(msg)=>`<div class="empty"><span aria-hidden="true">◇</span><p>${msg}</p></div>`;
@@ -56,9 +61,9 @@ function publicPage(route){
 function gallery(dept=''){const a=published('gallery').filter(r=>!dept||r.data.department===dept);return `<div class="gallery-grid">${!dept?`<figure><img src="/campus.jpg" alt="School campus"><figcaption>${t('Our campus · Bimbia','Notre campus · Bimbia')}</figcaption></figure>`:''}${a.map(r=>`<figure><img src="${safeImage(r.data.image)}" alt="${esc(r.data.title)}" loading="lazy"><figcaption>${esc(r.data.department)} · ${esc(localized(r.data,'title'))}</figcaption></figure>`).join('')}</div>${dept&&!a.length?empty(t('No photographs have been published for this department yet.','Aucune photographie publiée pour ce département.')):''}`;}
 function safeImage(v){return /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(v||'')?v:'/crest.jpg';}
 function login(){return `<section class="login-wrap"><div class="login-intro"><img src="/crest.jpg" alt="School crest"><p class="eyebrow gold">GHS MBONJO LIMBE</p><h1>${t('Welcome back<br>to your school.','Bienvenue dans<br>votre lycée.')}</h1><p>${t('A shared space for learning, teaching and supporting every student.','Un espace partagé pour apprendre, enseigner et accompagner chaque élève.')}</p></div><div class="login-card"><h2>${t('School portal','Portail scolaire')}</h2><p class="muted">${t('Choose your sign-in method.','Choisissez votre méthode de connexion.')}</p><form id="login-form"><label>${t('I am signing in as','Je me connecte en tant que')}<select name="mode" id="login-mode">${options([['staff',t('Staff member or parent','Personnel ou parent')],['student',t('Student','Élève')]])}</select></label><div id="staff-fields"><label>${t('Email address','Adresse e-mail')}<input type="email" name="email" autocomplete="username" required></label><label>${t('Password','Mot de passe')}<input type="password" name="password" autocomplete="current-password" required></label></div><div id="student-fields" hidden><label>${t('Your matricule','Votre matricule')}<input name="matricule" autocomplete="username"></label><label>${t('Your date of birth','Votre date de naissance')}<input type="date" name="birthDate" autocomplete="bday"></label><small class="muted">${t('Both are needed. They must match your school record. Contact the administration if your date of birth is wrong.','Les deux sont nécessaires et doivent correspondre à votre dossier scolaire. Contactez l’administration si votre date de naissance est incorrecte.')}</small></div><button class="primary full">${t('Sign in securely','Se connecter')}</button><p id="login-error" class="error" role="alert"></p></form><p class="muted small">${t('Need help with your account? Contact the school administration.','Besoin d’aide ? Contactez l’administration du lycée.')}</p>${link(t('← Back to school website','← Retour au site du lycée'),'home','text-link')}</div></section>`;}
-const tabs={overview:'Overview',profile:'My profile',academics:'Classes & subjects',students:'Students',staff:'Staff & roles',assignments:'Teaching assignments',attendance:'Attendance',resources:'Learning centre',marks:'Marks & report cards',requests:'Document requests',documents:'School documents',timetable:'Timetable',publishing:'Website publishing',ai:'AI writing assistant',settings:'AI settings',audit:'Activity log',backup:'PC backup'};
-const frTabs={overview:'Vue d’ensemble',profile:'Mon profil',academics:'Classes et matières',students:'Élèves',staff:'Personnel et rôles',assignments:'Affectations',attendance:'Assiduité',resources:'Centre pédagogique',marks:'Évaluations et bulletins',requests:'Demandes de documents',documents:'Documents scolaires',timetable:'Emploi du temps',publishing:'Publications',ai:'Assistant de rédaction IA',settings:'Paramètres IA',audit:'Journal d’activité',backup:'Sauvegarde PC'};
-function allowedTabs(){const r=profile.role;return Object.keys(tabs).filter(k=>({overview:true,academics:['principal','vp'].includes(r),profile:r!=='student',students:['principal','vp','discipline','teacher','hod'].includes(r),staff:r==='principal',assignments:['principal','vp','teacher','hod'].includes(r),attendance:r!=='content_creator',resources:['principal','vp','teacher','hod','student'].includes(r),requests:r==='principal'||requestingStaff(profile),marks:['principal','vp','teacher','hod','student','parent'].includes(r),documents:['principal','teacher','hod','vp','discipline','staff'].includes(r),timetable:true,publishing:['principal','vp','content_creator'].includes(r)||profile.contentCreator===true,ai:['principal','vp','hod'].includes(r),settings:r==='principal',audit:r==='principal',backup:r==='principal'}[k]));}
+const tabs={overview:'Overview',profile:'My profile',academics:'Classes & subjects',students:'Students',staff:'Staff & roles',assignments:'Teaching assignments',attendance:'Attendance',analytics:'Analytics',resources:'Learning centre',marks:'Marks & report cards',requests:'Document requests',documents:'School documents',timetable:'Timetable',publishing:'Website publishing',ai:'AI writing assistant',settings:'AI settings',audit:'Activity log',backup:'PC backup'};
+const frTabs={overview:'Vue d’ensemble',profile:'Mon profil',academics:'Classes et matières',students:'Élèves',staff:'Personnel et rôles',assignments:'Affectations',attendance:'Assiduité',analytics:'Analyses',resources:'Centre pédagogique',marks:'Évaluations et bulletins',requests:'Demandes de documents',documents:'Documents scolaires',timetable:'Emploi du temps',publishing:'Publications',ai:'Assistant de rédaction IA',settings:'Paramètres IA',audit:'Journal d’activité',backup:'Sauvegarde PC'};
+function allowedTabs(){const r=profile.role;return Object.keys(tabs).filter(k=>({overview:true,academics:['principal','vp'].includes(r),profile:r!=='student',students:['principal','vp','discipline','teacher','hod'].includes(r),staff:r==='principal',assignments:['principal','vp','teacher','hod'].includes(r),attendance:r!=='content_creator',analytics:['principal','vp','teacher','hod','discipline'].includes(r),resources:['principal','vp','teacher','hod','student'].includes(r),requests:r==='principal'||requestingStaff(profile),marks:['principal','vp','teacher','hod','student','parent'].includes(r),documents:['principal','teacher','hod','vp','discipline','staff'].includes(r),timetable:true,publishing:['principal','vp','content_creator'].includes(r)||profile.contentCreator===true,ai:['principal','vp','hod'].includes(r),settings:r==='principal',audit:r==='principal',backup:r==='principal'}[k]));}
 function portal(){if(!profile)return login();const wanted=new URLSearchParams(location.search).get('tab');if(wanted&&allowedTabs().includes(wanted))tab=wanted;if(!allowedTabs().includes(tab))tab='overview';return `<div class="portal"><aside><div class="portal-identity"><span class="avatar">${esc(profile.name[0])}</span><strong>${esc(profile.name)}</strong>${badge(postCatalogue.find(x=>x.id===(profile.post||profile.role))?.en||profile.role)}</div><nav aria-label="Portal navigation">${allowedTabs().map(k=>button(lang==='fr'?frTabs[k]:tabs[k],'tab',k===tab?'selected':'',`data-tab="${k}"`)).join('')}</nav>${button(t('Sign out','Déconnexion'),'logout','secondary')}</aside><section class="workspace"><div class="workspace-header"><div><p class="eyebrow">GHS MBONJO · ${esc(profile.role.replace('_',' '))}</p><h1>${lang==='fr'?frTabs[tab]:tabs[tab]}</h1></div>${button(t('Refresh','Actualiser'),'refresh','secondary')}</div><label class="portal-jump">${t('Go to','Aller à')}<select id="portal-jump">${options(allowedTabs().map(k=>[k,lang==='fr'?frTabs[k]:tabs[k]]),tab)}</select></label>${portalContent()}</section></div>`;}
 function table(a,cols,edit=true){if(!a.length)return empty(t('No records yet.','Aucun enregistrement.'));return `<div class="table-scroll"><table><thead><tr>${cols.map(c=>`<th>${esc(label(c))}</th>`).join('')}${edit?'<th>Actions</th>':''}</tr></thead><tbody>${a.map(r=>`<tr>${cols.map(c=>`<td>${c==='status'||c==='role'?badge(r.data[c]):['teacherId','studentId'].includes(c)?esc(name(r.data[c])):esc(r.data[c]??'—')}</td>`).join('')}${edit?`<td>${button(t('Open','Ouvrir'),'edit','text-button',`data-id="${r.id}"`)}</td>`:''}</tr>`).join('')}</tbody></table></div>`;}
 const labels={name:'Full name',matricule:'Matricule',class:'Class',birthDate:'Date of birth',birthPlace:'Place of birth',publicServiceDate:'First public-service assumption',schoolAssumptionDate:'Assumption at GHS Mbonjo',authId:'Supabase Auth user ID',salaryIndex:'Salary index',teacherId:'Teacher',studentId:'Student',dueDate:'Due date',submissionMode:'Submission method',titleFr:'Title in French',bodyFr:'Content in French',profileId:'Staff member',dutyDate:'Duty date',issueDate:'Issue date',reference:'Reference number',form5End:'Form 5 closing time',subjects:'Extra subjects (compulsory class subjects are always included)',code:'Short code for the timetable (for example CSC). Leave empty for the default.',officeLabel:'Office label (for example VP Arts or SDM 2)',whatsapp:'WhatsApp number (include country code)',children:'Linked students',periods:'Periods per week'};
@@ -77,6 +82,23 @@ function portalContent(){
  if(tab==='resources')return `${isAdmin||['teacher','hod'].includes(r)?toolbar('resource'):''}<div class="resource-grid">${list('resource').map(x=>`<article class="panel"><div class="row">${badge(x.data.type)}${badge(x.data.status)}</div><h3>${esc(x.data.title)}</h3><p>${esc(x.data.class)} · ${esc(x.data.subject)}</p><p class="muted">${esc(x.data.dueDate||'')} · ${esc(x.data.submissionMode)}</p>${button(t('Open resource','Ouvrir la ressource'),'resource','primary',`data-id="${x.id}"`)}</article>`).join('')||empty(t('No learning resources available yet.','Aucune ressource disponible.'))}</div><h2>Timed assessment attempts</h2>${list('exam_attempt').map(a=>`<article class="panel row"><div><strong>${esc(name(a.data.studentId))}</strong><p>${esc(a.data.title)} · ${badge(a.data.status)}</p></div>${profile.role!=='student'&&a.data.status!=='in_progress'?button('Mark written answers','review-exam','secondary',`data-id="${a.id}"`):''}</article>`).join('')}<h2>${t('Submissions','Travaux remis')}</h2>${table(list('submission'),['studentId','body','feedback','score'],profile.role!=='student')}`;
  if(tab==='marks')return `${['principal','vp','teacher','hod'].includes(r)?`<form id="marks-query" class="panel form-grid"><label>Academic year<input name="year" required value="${esc(marksYear)}" pattern="[0-9]{4}/[0-9]{4}"></label><label>Class<select name="class"><option value="">All permitted classes</option>${options(classes,marksClass)}</select></label><button class="primary">Load marks</button><p class="wide muted">Includes draft and published marks you are permitted to view. Choose another year to see earlier records.</p></form>`:''}${isAdmin||['teacher','hod'].includes(r)?toolbar('mark'):''}<div class="panel"><h2>${t('Print report cards','Imprimer les bulletins')}</h2><form id="report-form" class="form-grid"><label>${t('Class','Classe')}<select name="class">${options(classes)}</select></label><label>${t('Assessment','Évaluation')}<select name="assessment">${options([...Array.from({length:6},(_,i)=>`Sequence ${i+1}`),'Promotion exam'])}</select></label><label>${t('Academic year','Année scolaire')}<input name="year" value="2026/2027" required></label><label>Output<select name="output"><option value="reports">Individual report cards</option><option value="master">Master result sheet</option></select></label><button class="primary">${t('Preview class reports','Aperçu des bulletins')}</button></form></div><p class="muted">${t('Six sequence tests. Promotion exams apply only to Forms 1–4 and Lower Sixth. Blank marks are not zero.','Six séquences. L’examen de promotion concerne uniquement les Forms 1–4 et Lower Sixth. Une note vide n’est pas un zéro.')}</p>${table(list('mark'),['studentId','subject','assessment','mark','coefficient','status'],isAdmin||['teacher','hod'].includes(r))}`;
  if(tab==='documents')return `${r==='principal'?toolbar('document',button('Other official documents','official-letter','secondary')+button(t('Bulk issue','Émission en lot'),'bulk-docs','secondary')):''}${list('document').map(x=>`<article class="panel row"><div><h3>${esc(x.data.title||x.data.name)}</h3><p>${esc(x.data.reference)} · ${esc(x.data.kind)} ${badge(x.data.status)}</p></div><div class="actions">${button(t('Print','Imprimer'),'print-document','secondary',`data-id="${x.id}"`)}${r==='principal'&&x.data.status==='issued'?button(t('Revoke','Révoquer'),'revoke','danger',`data-id="${x.id}"`):''}</div></article>`).join('')||empty(t('No attestations issued yet.','Aucune attestation délivrée.'))}`;
+ if(tab==='analytics'){
+  const classOptions=[...new Set(list('assignment').map(r=>r.data.class))].sort();
+  const controls=`<form id="analytics-form" class="panel">
+   <h2>${t('Analytics','Analyses')}</h2>
+   <p class="muted">${t('Attendance, results and roll-call coverage over a period you choose. Figures cover only the classes you are allowed to see.','Assiduité, résultats et suivi des appels sur une période de votre choix. Les chiffres ne portent que sur les classes auxquelles vous avez accès.')}</p>
+   <div class="form-grid">
+    <label>${t('From','Du')}<input type="date" name="from" value="${esc(anFrom)}" required></label>
+    <label>${t('To','Au')}<input type="date" name="to" value="${esc(anTo)}" required></label>
+    <label>${t('Class','Classe')}<select name="class">${options([['',t('All my classes','Toutes mes classes')],...classOptions.map(c=>[c,c])],anClass)}</select></label>
+    <label>${t('Academic year for results','Année scolaire (résultats)')}<select name="year">${options([academicYear(),previousYear()],anYear)}</select></label>
+   </div>
+   <div class="actions"><button class="primary"${anBusy?' disabled':''}>${anBusy?t('Working…','Calcul…'):t('Show analytics','Afficher les analyses')}</button>${anReport?button(t('Print','Imprimer'),'print-analytics','secondary'):''}</div>
+   ${anError?`<p class="error">${esc(anError)}</p>`:''}
+  </form>`;
+  if(!anReport)return controls+empty(t('Choose a period and show the analytics.','Choisissez une période puis affichez les analyses.'));
+  return controls+analyticsView(anReport);
+ }
  if(tab==='timetable'){
   const sheets=list('timetable'),entries=allTimetableEntries(),subjects=availableSubjects(rows);
   const generator=isAdmin?timetablePanel(subjects):'';
@@ -108,6 +130,97 @@ async function saveExam(submit=false){if(examSaving){if(submit)examSubmitPending
 let answerSaveTimer;document.addEventListener('input',e=>{if(e.target.closest('#exam-form')){clearTimeout(answerSaveTimer);answerSaveTimer=setTimeout(()=>saveExam().catch(err=>{if($('#exam-save-status'))$('#exam-save-status').textContent='Not saved. Check your connection.';toast(err.message);}),600);}});
 function requestsPanel(compact=false){const a=list('document_request').filter(r=>!compact||requestState(r,list('document')).status==='pending');return `${!compact&&requestingStaff(profile)?button('Request a document','request-document','primary'):''}${a.length?a.map(r=>{const state=requestState(r,list('document'));return `<article class="panel request-card"><div><h3>${esc(r.data.name)}</h3><p>${esc(r.data.requestType)} · ${badge(state.status)}</p><p>${esc(r.data.purpose)}</p>${r.data.reviewComment?`<p>${esc(r.data.reviewComment)}</p>`:''}</div><div class="actions">${state.status==='pending'?(profile.role==='principal'?button('Prepare document','fulfil-request','primary',`data-id="${r.id}"`)+button('Decline','reject-request','secondary',`data-id="${r.id}"`):button('Cancel request','cancel-request','secondary',`data-id="${r.id}"`)):state.documentId?button('Open issued document','print-document','primary',`data-id="${state.documentId}"`):''}</div></article>`;}).join(''):empty('No document requests to show.')}`;}
 function officialLetter(request=null){modal('Official letterhead document',`<form id="official-letter-form" data-request="${request?.id||''}"><div class="form-grid"><label>Document type<select name="letterType">${options(officialTypes,request?'Employment confirmation':'Custom letter')}</select></label><label>Reference number<input name="reference" required></label><label>Issue date<input name="issueDate" type="date" value="${today()}" required></label><label>Recipient<input name="recipient" value="${esc(request?.data.name||'')}" required></label><label class="wide">Subject heading<input name="title" maxlength="160" value="${request?'CONFIRMATION OF EMPLOYMENT':''}" required></label><label class="wide">Document body<textarea name="body" rows="12" maxlength="12000" required placeholder="Enter the complete official text. Include confirmed names, dates and details only."></textarea></label></div><p>The subject is centred and underlined, like the attestations. Review the wording before issuing.</p><button class="primary">Issue and preview</button></form>`);}
+// --- Analytics ----------------------------------------------------------------
+// Every figure is shown with the count it came from. A class with no roll call
+// reads as "no records", never as 0%, because the two mean opposite things.
+const previousYear=()=>{const [a,b]=academicYear().split('/').map(Number);return `${a-1}/${b-1}`;};
+const pctText=v=>v===null||v===undefined?'—':v+'%';
+const toneFor=(v,good,fair)=>v===null?'':v>=good?'good':v>=fair?'fair':'poor';
+
+function analyticsView(report){
+ const {attendance:a,results:r,coverage:c,range}=report;
+ const period=`${esc(range.from)} → ${esc(range.to)}`;
+ const target=Number(a.watchBelow)||80;
+
+ const heading=`<div class="panel an-head"><div><p class="eyebrow">${t('PERIOD','PÉRIODE')}</p><h2>${period}</h2>
+  <p class="muted small">${esc(anScope==='school'?t('Whole school','Tout l’établissement'):anScope==='attendance'?t('Attendance across the school','Assiduité de l’établissement'):t('Your own classes only','Vos classes uniquement'))}${anClass?' · '+esc(anClass):''}</p></div></div>`;
+
+ // --- attendance ---
+ const kpis=`<div class="stats an-stats">
+  ${statTile(t('Attendance','Assiduité'),a.overall.rate,{unit:'%',note:`${a.overall.counted} ${t('lessons recorded','présences enregistrées')}`,tone:toneFor(a.overall.rate,90,80)})}
+  ${statTile(t('Absences','Absences'),a.overall.absent,{note:`${a.overall.late} ${t('late','retards')} · ${a.overall.excused} ${t('excused','justifiées')}`})}
+  ${statTile(t('Students below target','Élèves sous le seuil'),a.watchlist.length,{note:`${t('under','moins de')} ${target}%`,tone:a.watchlist.length?'poor':'good'})}
+  ${statTile(t('Roll call taken','Appels faits'),c.rate,{unit:'%',note:`${c.taken} ${t('of','sur')} ${c.expected} ${t('lessons','cours')}`,tone:toneFor(c.rate,90,75)})}
+ </div>`;
+
+ const attendanceSection=`<div class="panel">
+  <h3>${t('Attendance over time','Évolution de l’assiduité')}</h3>
+  <p class="muted small">${t('Each point is one week. Present and late both count as attended; excused absences are left out of the rate.','Chaque point représente une semaine. Présences et retards comptent comme présence ; les absences justifiées sont exclues du taux.')}</p>
+  ${lineChart(a.byWeek.map(w=>({key:w.key.slice(5),value:w.rate,note:`${w.counted} lessons`})),{label:t('Weekly attendance rate','Taux hebdomadaire')})}
+  <h3>${t('By class','Par classe')}</h3>
+  ${barChart(a.byClass.map(x=>({key:x.key,value:x.rate,note:`${x.counted} lessons`})),{target,label:t('Attendance by class','Assiduité par classe')})}
+  <p class="muted small">${t(`The dashed line is the ${target}% target. A class in red is below it.`,`La ligne pointillée marque le seuil de ${target} %. Une classe en rouge est en dessous.`)}</p>
+  ${figureTable(a.byClass.map(x=>({key:x.key,value:x})),{headings:[t('Class','Classe'),t('Rate · present · late · absent · excused','Taux · présents · retards · absents · justifiées')],format:x=>`${pctText(x.value.rate)} · ${x.value.present} · ${x.value.late} · ${x.value.absent} · ${x.value.excused}`})}
+  <div class="an-two">
+   <div><h3>${t('By day of the week','Par jour')}</h3>
+    ${columnChart(a.byWeekday.filter(d=>d.counted).map(d=>({key:d.key.slice(0,3),value:d.rate,note:`${d.counted} lessons`})),{target,label:t('Attendance by weekday','Assiduité par jour')})}</div>
+   <div><h3>${t('By period of the day','Par période')}</h3>
+    ${a.byPeriod.length?columnChart(a.byPeriod.map(x=>({key:'P'+x.key,value:x.rate,note:`${x.counted} lessons`})),{target,label:t('Attendance by period','Assiduité par période')}):`<p class="chart-empty">${t('Needs a published timetable to match lessons to periods.','Nécessite un emploi du temps publié pour rattacher les cours aux périodes.')}</p>`}</div>
+  </div>
+  ${a.byGender.length===2?`<h3>${t('Girls and boys','Filles et garçons')}</h3><div class="stats an-stats">${a.byGender.map(g=>statTile(g.key,g.rate,{unit:'%',note:`${g.counted} ${t('lessons','présences')}`,tone:toneFor(g.rate,90,80)})).join('')}</div>`:''}
+ </div>`;
+
+ const watch=`<div class="panel">
+  <h3>${t('Attendance watchlist','Élèves à suivre')}</h3>
+  <p class="muted small">${t(`Students below ${target}% with at least ${a.minLessons} lessons on record. A student with only one or two lessons recorded is left out — the percentage would mean nothing.`,`Élèves sous ${target} % avec au moins ${a.minLessons} cours enregistrés. Les élèves ayant très peu de cours enregistrés sont exclus : le pourcentage n’aurait pas de sens.`)}</p>
+  ${a.watchlist.length?`<div class="table-scroll"><table><thead><tr><th>${t('Student','Élève')}</th><th>${t('Class','Classe')}</th><th>${t('Rate','Taux')}</th><th>${t('Absent','Absences')}</th><th>${t('Late','Retards')}</th><th>${t('Lessons','Cours')}</th></tr></thead><tbody>
+   ${a.watchlist.slice(0,60).map(s=>`<tr><td>${esc(s.name||'—')}</td><td>${esc(s.class||'—')}</td><td><b class="low">${pctText(s.rate)}</b></td><td>${s.absent}</td><td>${s.late}</td><td>${s.counted}</td></tr>`).join('')}
+  </tbody></table></div>${a.watchlist.length>60?`<p class="muted small">${t('Showing the 60 lowest.','Les 60 taux les plus faibles sont affichés.')}</p>`:''}`
+  :`<p class="chart-empty">${t('No student is below the threshold in this period.','Aucun élève sous le seuil sur cette période.')}</p>`}
+ </div>`;
+
+ // --- results ---
+ const resultsSection=`<div class="panel">
+  <h3>${t('Results','Résultats')} · ${esc(range.year||'—')}</h3>
+  ${r.overall.count?`<div class="stats an-stats">
+   ${statTile(t('Average','Moyenne'),r.overall.average,{unit:'/20',note:`${r.overall.count} ${t('published marks','notes publiées')}`,tone:toneFor(r.overall.average*5,70,50)})}
+   ${statTile(t('Pass rate','Taux de réussite'),r.overall.passRate,{unit:'%',note:`${r.overall.pass} ${t('marks at 10 or above','notes ≥ 10')}`,tone:toneFor(r.overall.passRate,70,50)})}
+   ${statTile(t('Subjects','Matières'),r.subjects,{note:`${r.classes} ${t('classes','classes')}`})}
+  </div>
+  <h3>${t('Average by subject','Moyenne par matière')}</h3>
+  ${barChart(r.bySubject.map(x=>({key:x.key,value:x.average,note:`${x.count} marks · ${pctText(x.passRate)} pass`})),{max:20,unit:'',target:10,label:t('Average by subject','Moyenne par matière')})}
+  <p class="muted small">${t('Out of 20. The dashed line is the pass mark; a subject in red is averaging a fail.','Sur 20. La ligne pointillée marque la moyenne de passage ; une matière en rouge est sous la moyenne.')}</p>
+  ${figureTable(r.bySubject.map(x=>({key:x.key,value:x})),{headings:[t('Subject','Matière'),t('Average · pass rate · marks · lowest · highest','Moyenne · réussite · notes · min · max')],format:x=>`${x.value.average}/20 · ${pctText(x.value.passRate)} · ${x.value.count} · ${x.value.lowest} · ${x.value.highest}`})}
+  <div class="an-two">
+   <div><h3>${t('Spread of marks','Répartition des notes')}</h3>
+    ${columnChart(r.distribution.map(d=>({key:d.key,value:d.count})),{max:Math.max(1,...r.distribution.map(d=>d.count)),unit:'',label:t('Mark distribution','Répartition des notes')})}
+    <p class="muted small">${t('Number of marks in each band, out of 20.','Nombre de notes par tranche, sur 20.')}</p></div>
+   <div><h3>${t('By class','Par classe')}</h3>
+    ${barChart(r.byClass.map(x=>({key:x.key,value:x.average,note:`${x.count} marks`})),{max:20,unit:'',target:10,label:t('Average by class','Moyenne par classe')})}</div>
+  </div>
+  ${r.sequences.length>1?`<h3>${t('Across the sequences','Évolution par séquence')}</h3>
+   ${lineChart(r.sequences.map(x=>({key:x.key.replace('Sequence','Seq'),value:x.average,note:`${x.count} marks`})),{unit:'/20',max:20,min:0,label:t('Average by sequence','Moyenne par séquence')})}`:''}`
+  :`<p class="chart-empty">${t('No published marks for this year yet. Publish marks in Marks & report cards and they will appear here.','Aucune note publiée pour cette année. Publiez des notes dans Évaluations et bulletins pour les voir ici.')}</p>`}
+ </div>`;
+
+ // --- coverage ---
+ const coverageSection=`<div class="panel">
+  <h3>${t('Roll-call coverage','Suivi des appels')}</h3>
+  <p class="muted small">${t(`Of the lessons the timetable places on the ${c.schoolDays} days the school recorded anything, how many had a roll call taken. A day with no roll call anywhere is treated as a holiday and not counted, so a whole day the school forgot the register is invisible here.`,`Parmi les cours prévus à l’emploi du temps sur les ${c.schoolDays} jours où l’établissement a enregistré quelque chose, part de ceux dont l’appel a été fait. Une journée sans aucun appel est considérée comme non travaillée.`)}</p>
+  ${c.expected?`<div class="an-two">
+   <div><h3>${t('By class','Par classe')}</h3>${barChart(c.byClass.map(x=>({key:x.key,value:x.rate,note:`${x.taken}/${x.expected}`})),{target:80,label:t('Coverage by class','Suivi par classe')})}</div>
+   <div><h3>${t('Lessons missed','Appels manquants')}</h3>${columnChart(c.byTeacher.slice(0,8).map(x=>({key:shorten(x.name,10),value:x.missed,note:`${x.taken}/${x.expected} taken`})),{max:Math.max(1,...c.byTeacher.map(x=>x.missed)),unit:'',label:t('Lessons without a roll call','Cours sans appel')})}
+   <p class="muted small">${t('The eight teachers with the most lessons where no roll call was recorded.','Les huit enseignants ayant le plus de cours sans appel enregistré.')}</p></div>
+  </div>
+  <div class="table-scroll"><table><thead><tr><th>${t('Teacher','Enseignant')}</th><th>${t('Taken','Faits')}</th><th>${t('Expected','Prévus')}</th><th>${t('Missed','Manquants')}</th><th>${t('Rate','Taux')}</th></tr></thead><tbody>
+   ${c.byTeacher.map(x=>`<tr><td>${esc(x.name)}</td><td>${x.taken}</td><td>${x.expected}</td><td>${x.missed}</td><td><b class="${x.rate!==null&&x.rate<80?'low':''}">${pctText(x.rate)}</b></td></tr>`).join('')}
+  </tbody></table></div>`
+  :`<p class="chart-empty">${t('Needs a published timetable and some attendance records before coverage can be measured.','Nécessite un emploi du temps publié et des présences enregistrées.')}</p>`}
+ </div>`;
+
+ return heading+kpis+attendanceSection+watch+resultsSection+coverageSection;
+}
+
 // --- Printed timetable sheets -------------------------------------------------
 // Two layouts, matching the sheets the school already prints: one page per class,
 // and one sheet per teacher with their weekly subject totals beside the grid.
@@ -299,6 +412,7 @@ document.addEventListener('click',async e=>{const el=e.target.closest('[data-act
   form.querySelectorAll('input[type=number][name^="sub:"],input[type=number][name^="stf:"]').forEach(x=>x.value='');
   toast(t('Preferences reset. Generate to apply them.','Préférences réinitialisées. Générez pour les appliquer.'));
  }
+ if(action==='print-analytics'&&anReport)printView(`<article class="print-page an-print"><h1>GHS Mbonjo Limbe · ${esc(t('Analytics','Analyses'))}</h1><p>${esc(anFrom)} → ${esc(anTo)}${anClass?' · '+esc(anClass):''}</p>${analyticsView(anReport)}</article>`);
  if(action==='print-class')printView(classSheet(id,allTimetableEntries(),availableSubjects(rows)));
  if(action==='print-teacher')printView(teacherSheet(id,allTimetableEntries(),availableSubjects(rows)));
  if(action==='print-all-classes'){const e=allTimetableEntries(),s=availableSubjects(rows);printView(timetableClasses(e).map(c=>classSheet(c,e,s)).join(''));}
@@ -347,6 +461,16 @@ document.addEventListener('submit',async e=>{e.preventDefault();const form=e.tar
  if(kind==='student'){d.matricule=normalizeMatricule(d.matricule);d.subjects=new FormData(form).getAll('subjects');}await api('save',{kind,id:old?.id,version:old?.version,data:d});$('#modal').close();await refresh();toast(t('Saved.','Enregistré.'));}
  if(form.id==='submission-form'){await api('save',{kind:'submission',data:{resourceId:form.dataset.id,body:data.body}});$('#modal').close();await refresh();toast('Your work has been submitted.');}
  if(form.id==='roll-form'){const a=byId($('#roll-assignment').value),date=$('#roll-date').value;let count=0;try{for(const [studentId,status] of Object.entries(data)){const old=list('attendance').find(r=>r.data.studentId===studentId&&r.data.assignmentId===a.id&&r.data.date===date);await api('save',{kind:'attendance',id:old?.id,version:old?.version,data:{studentId,status,date,class:a.data.class,assignmentId:a.id,subject:a.data.subject}});count++;}}catch(err){await refresh();throw Error(`${count} attendance records saved before stopping. ${err.message}`);}await refresh();toast(`${count} attendance records saved.`);}
+ if(form.id==='analytics-form'){
+  anFrom=data.from;anTo=data.to;anClass=data.class||'';anYear=data.year||academicYear();
+  anBusy=true;anError='';render();
+  try{
+   const r=await api('analytics',{from:anFrom,to:anTo,class:anClass||undefined,year:anYear});
+   anReport=r.report;anScope=r.scope;
+  }catch(err){anReport=null;anError=err.message;}
+  finally{anBusy=false;render();}
+  return;
+ }
  if(form.id==='timetable-form'){const preferences=readPreferences(form);const r=await api('timetable',{preferences});await refresh();const n=(r.row?.data?.entries||[]).length;toast(t(`Timetable generated: ${n} periods placed, no teacher or class in two places at once.`,`Emploi du temps généré : ${n} périodes placées, sans conflit.`));}
  if(form.id==='provision-form'){await api('provision',data);$('#modal').close();await refresh();toast('Login created.');}
  if(form.id==='password-form'){await api('password',data);$('#modal').close();profile=null;rows=[];navigate('login');render();toast('Password changed. Please sign in.');}

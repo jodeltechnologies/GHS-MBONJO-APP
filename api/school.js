@@ -8,6 +8,7 @@ import {writingInstruction,cleanGeneratedText} from '../src/writing-style.js';
 import crypto from 'node:crypto';
 import {attestationText,classes,roles,normalizeMatricule,normalizeBirthDate,validateRecord,generateTimetable,normalizePreferences,studies,reportSummary} from '../src/domain.js';
 import {canRead,canWrite,admin,assigned} from '../src/access.js';
+import {schoolAnalytics} from '../src/analytics.js';
 const base=()=>process.env.SUPABASE_URL?.replace(/\/$/,''),key=()=>process.env.SUPABASE_SERVICE_ROLE_KEY;
 const fail=(message,status=400)=>{throw Object.assign(Error(message),{status})};
 async function db(path,method='GET',body){const r=await fetch(`${base()}/rest/v1/${path}`,{method,headers:{apikey:key(),Authorization:`Bearer ${key()}`,'Content-Type':'application/json',Prefer:'return=representation'},body:body===undefined?undefined:JSON.stringify(body)});const data=await r.json().catch(()=>null);if(!r.ok&&data?.code==='40001')fail('Record changed. Refresh before saving.',409);if(!r.ok)fail(r.status===409?'Duplicate record. Check matricule, reference, or assessment.':'Database operation failed. Verify setup or retry.',r.status===409?409:503);return data;}
@@ -96,6 +97,39 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   if(!a)fail('Start the assessment first.');if(op==='exam-start')return res.json({row:redact(p,a),serverNow:new Date(now).toISOString()});
   const answers=acceptAnswers(a.data,b.answers||{},now),expired=now>=Date.parse(a.data.deadline);const data={...a.data,answers,savedAt:new Date(now).toISOString()};if(op==='exam-submit'||expired){Object.assign(data,gradeAttempt(data.questions,answers),{status:'submitted',submittedAt:new Date(now).toISOString()});}
   const result=await db('rpc/school_save_record','POST',{record_kind:'exam_attempt',record_data:data,actor_id:p.id,record_id:a.id,expected_version:a.version});return res.json({row:redact(p,result[0]),serverNow:new Date(now).toISOString()});
+ }
+ if(op==='analytics'){
+  if(!['principal','vp','teacher','hod','discipline'].includes(p.role))fail('Staff access is required for analytics.',403);
+  const iso=v=>/^\d{4}-\d{2}-\d{2}$/.test(v||'')&&Number.isFinite(Date.parse(v));
+  if(!iso(b.from)||!iso(b.to))fail('Choose a start and end date.');
+  if(b.to<b.from)fail('The end date comes before the start date.');
+  if((Date.parse(b.to)-Date.parse(b.from))/86400000>400)fail('Choose a range of at most about a year.');
+  if(b.year&&!/^\d{4}\/\d{4}$/.test(b.year))fail('Choose an academic year such as 2026/2027.');
+  if(b.class&&!classNames.includes(b.class))fail('Choose a valid class.');
+  // Everything is filtered through the same read rules as anywhere else, so a
+  // teacher's figures are built only from the classes they are assigned to, and
+  // only aggregates ever leave the server — never the underlying records.
+  const attendance=(await allRecords('kind=eq.attendance&data->>date=gte.'+enc(b.from)+'&data->>date=lte.'+enc(b.to)))
+   .filter(r=>canRead(p,r,all)&&(!b.class||r.data.class===b.class));
+  const marks=b.year?(await allRecords('kind=eq.mark&data->>year=eq.'+enc(b.year)+(b.class?'&data->>class=eq.'+enc(b.class):'')))
+   .filter(r=>canRead(p,r,all)):[];
+  const timetable=(await allRecords('kind=eq.timetable')).filter(r=>canRead(p,r,all));
+  const entries=timetable.flatMap(r=>r.data.entries||[])
+   .filter(e=>!b.class||e.class===b.class)
+   .filter(e=>admin(p)||p.role==='discipline'||all.some(a=>a.kind==='assignment'&&a.data.teacherId===p.id&&a.data.class===e.class&&a.data.subject===e.subject));
+  const students=all.filter(r=>r.kind==='student'&&canRead(p,r,all)&&(!b.class||r.data.class===b.class))
+   .map(r=>({id:r.id,data:{name:r.data.name,class:r.data.class,gender:r.data.gender}}));
+  const assignments=all.filter(r=>r.kind==='assignment'&&(admin(p)||p.role==='discipline'||r.data.teacherId===p.id))
+   .map(r=>({id:r.id,data:r.data}));
+  const staff=new Map(all.filter(r=>r.kind==='profile').map(r=>[r.id,r.data.name]));
+  const report=schoolAnalytics({
+   attendance:attendance.map(r=>r.data),marks:marks.map(r=>r.data),
+   students,assignments,timetableEntries:entries,
+   from:b.from,to:b.to,year:b.year||'',assessment:b.assessment||'',
+   watchBelow:Math.min(100,Math.max(1,Math.round(Number(b.watchBelow))||80)),
+   minLessons:Math.min(100,Math.max(1,Math.round(Number(b.minLessons))||5)),
+   nameFor:id=>staff.get(id)||''});
+  return res.json({report,scope:admin(p)?'school':p.role==='discipline'?'attendance':'own classes'});
  }
  if(op==='contacts'){if(!canUseWriter(p))fail('Principal, VP or HOD access required.',403);return res.json({contacts:colleagueContacts(p,all)});}
  if(op==='backup-page'){

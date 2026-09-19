@@ -119,6 +119,16 @@ The hard rules are never traded for that: no class and no teacher is ever in two
 
 Generation is deterministic: the same assignments always produce the same timetable, so regenerating does not reshuffle the school without reason.
 
+### Analytics
+
+The Analytics tab summarises attendance, results and roll-call coverage over a period the user chooses. Aggregation happens on the server and only the summary is sent to the browser, so a year of attendance never has to cross the wire. Every row is filtered through the same read rules as the rest of the portal before it is counted: the principal and VP see the whole school, a teacher or HOD sees only the classes they are assigned to, discipline staff see attendance. Nothing in `src/analytics.js` decides who may see what — it aggregates whatever it is handed, which keeps the access rules in one place.
+
+Attendance is reported overall and by class, week, weekday and period of the day, with a girls-and-boys split and a watchlist of students below the target. Present and late both count as attended; excused absences are reported but left out of the rate, since counting them as absent would punish a class for doing the paperwork. Results cover published marks only, with average and pass rate by subject and class, the spread across mark bands and progress across the sequences. Coverage compares the register against the published timetable.
+
+Two rules hold throughout. A missing record is never a zero: a class with no roll call has no rate rather than 0%, and a blank mark is excluded rather than counted as a fail. School days are inferred rather than assumed — a weekday on which no roll call was taken anywhere is treated as a non-teaching day, so holidays do not depress the coverage figures; the cost is that a day the whole school missed the register does not show up, which the page states.
+
+Charts are inline SVG. The site's Content-Security-Policy is `script-src 'self'`, so no charting library can be loaded from a CDN and none is needed. Colour follows the job: one hue for magnitude, and a status colour for a value below target that never carries the meaning alone — the figure is printed on every bar.
+
 ### Learning and attendance
 
 - Teacher-created resources begin as drafts or pending review. HOD/administration can publish; students cannot see drafts.

@@ -31,6 +31,7 @@ Production build succeeds. Export and spreadsheet libraries load on demand. Publ
 
 ## Remaining checks and limits
 
+- Check analytics scoping on the live deployment: sign in as a teacher and confirm the figures name only their own classes, and that the roll-call coverage table lists only themselves.
 - Check the timetable preferences on the live deployment: set one teacher's unavailable day and confirm their sheet is empty on it, and confirm an impossible limit is refused with a message rather than saving a partial timetable.
 - Check the generated timetable on the live deployment before printing for the school: one class sheet, one teacher sheet, and that no teacher appears in two classes in the same period. Generation is deterministic, so a regenerated timetable should match.
 - Apply update-003.sql and check live authentication, role assignments, database constraints, real multi-user concurrency and backups. Student access now requires the matricule and the student's own date of birth. Confirm on the live deployment that a correct pair signs in, a wrong date does not, and a record with a blank date of birth shows the administration message.
