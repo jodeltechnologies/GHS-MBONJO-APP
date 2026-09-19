@@ -105,6 +105,16 @@ Staff and parent accounts use passwords. Sessions are HTTP-only, secure cookies 
 
 The bursar post is available, with only one active appointee. There is no finance module, fee collection or payment processing. The principal has no financial operations. Salary index is retained only as a requested staff/document field.
 
+### Timetable
+
+The principal or VP generates the timetable from the teaching assignments. It is produced in two printed layouts, both matching the sheets the school already uses: one page per class, and one sheet per teacher with their weekly subject totals beside the grid. Double periods print as a single wide box. Print one class, one teacher, all classes or all teachers; use the browser's Save as PDF for a file.
+
+The generator places whole blocks rather than single periods: each assignment is split into doubles, with one single left over when the weekly count is odd. Beyond avoiding clashes it works to a teacher's week — it pulls each teacher's lessons onto as few days as possible and groups them so they run on from one another instead of leaving free periods in between. On a full 14-class load this produced an average of 3.7 days in school per teacher against 4.9 before, with 2 of 30 teachers on a five-day week instead of 28.
+
+The hard rules are never traded for that: no class and no teacher is ever in two places at once, a class never meets the same subject twice in a day beyond one double, and no double is split across the break. The result is either a complete timetable or a refusal — a partial timetable is never saved. If a class or teacher is assigned more periods than the school week holds, the error names them and the count so the register can be corrected.
+
+Generation is deterministic: the same assignments always produce the same timetable, so regenerating does not reshuffle the school without reason.
+
 ### Learning and attendance
 
 - Teacher-created resources begin as drafts or pending review. HOD/administration can publish; students cannot see drafts.

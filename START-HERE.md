@@ -2,7 +2,27 @@
 
 No terminal commands are needed.
 
-## This update: students can now sign in
+## This update: timetables
+
+The Timetable tab did not open at all — it called a function that was never finished. It works now, and the generator has been rewritten around the teachers.
+
+**Two printed sheets**, both laid out like the ones the school already uses:
+
+- **One page per class**, with the crest, the class name, the ten periods with their times, the BREAK column and the HOD's signature line. Double periods print as one wide box.
+- **One sheet per teacher**, with the day names down the side and the subject totals and Lessons/week panel beside the grid.
+
+Principal → Timetable: choose a class or a teacher to see the sheet, then **Print this class**, **Print all classes**, **Print this teacher** or **Print all teachers**. Use Print → Save as PDF for a file. Teachers and HODs see their own sheet first when they open the tab, and HODs can look up any teacher. Students see their class sheet.
+
+**The generator now works for the teachers, not just against the clashes:**
+
+- Lessons are placed in **doubles** wherever the weekly count allows, so four periods with one class become two double periods rather than four scattered singles. An odd count leaves one single.
+- Each teacher's periods are pulled onto **as few days as possible**, and grouped to run on from one another so they are not sitting through free periods between lessons. On the school-sized test load, teachers averaged 3.7 days in school a week instead of 4.9, and only 2 of 30 had to come in all five days instead of 28 of 30.
+- A class never meets the same subject twice in a day beyond one double, and no double is split across the break.
+- If a class or a teacher is assigned more periods than the week holds, the message now names them and the number, instead of searching for an impossible timetable.
+
+Nothing about this needs SQL or new environment variables. Regenerate from Principal → Timetable after uploading.
+
+## Previous update: students can now sign in
 
 Students were seeing **"Student matricule access has not yet been enabled by the school."** That block has been removed.
 
@@ -20,6 +40,7 @@ If a student is told their record has no date of birth, open **Principal → Stu
 2. Unzip this package. Open the existing GitHub repository → Add file → Upload files. Upload the CONTENTS of website/ at the repository root, replacing the existing files. Commit the change. Keep the repository private because api/data/students.json contains student records.
 3. Wait for Vercel to show Ready. Close the school website and installed app, reopen, and refresh. Keep your existing environment variables.
 4. Test the student sign-in: open the portal, choose **Student**, enter one student's matricule and that student's date of birth. A wrong date must be refused.
+5. Open Principal → Timetable, confirm the Form 5 closing time and generate. Check one class sheet and one teacher sheet before printing for the school.
 
 ## Where to find the new features
 
