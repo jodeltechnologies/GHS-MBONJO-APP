@@ -2,7 +2,29 @@
 
 No terminal commands are needed.
 
-## This update: analytics
+## This update: the department office
+
+**This update needs SQL.** Run `website/supabase/update-004.sql` in the Supabase SQL Editor before uploading the files — it adds four new record types. Everything else is unchanged.
+
+A head of department now has their own working area under **My department**, and every member of staff has **Messages**.
+
+**Documents.** Write a document, or send an AI draft straight to the department library with *Save to my department* on the AI writing page. Papers are filed as Reports, Minutes, Letters or Notes. The head of department signs a document with their own signature image — upload it once under **My profile → Signature** — and it then appears on the document on screen and in print, on the school letterhead.
+
+**Transmitting.** A document stays inside the department until the head of department transmits it. Only then can the principal and vice principal read it. A document must be signed before it can be transmitted, so nothing reaches the administration that nobody has stood behind. Transmitted papers also appear in the PC backup; untransmitted ones do not.
+
+**Equipment.** The department's computers, printers, projectors and so on, with quantity, condition, location and serial number. **The administration can always see this list** — it is the record of what the department answers for. Only the head of department edits it.
+
+**Messages.** Every member of staff gets a running thread with their whole department, plus direct notes to any colleague. The principal is not a member of other people's threads and does not see them in the portal.
+
+Be clear with your staff about what that means: **these messages are not encrypted.** Whoever holds the Supabase password can read them in the database directly, and the messages page says so on screen. It keeps conversations out of the principal's screens; it is not a guarantee of secrecy.
+
+**Progression and coverage.** Eight progression sheets are built in — Computer Science Forms 1 to 4, Computer Science Lower and Upper Sixth, and ICT Lower and Upper Sixth — with 785 lessons between them, taken from the 2026-2027 sheets. Choose *Track a scheme*, say which week the school is in, and tick lessons as they are taught. The dashboard then shows what has been covered, what the sheet expects by now, and how many lessons behind the subject is.
+
+Other departments use **Import a sheet**: an Excel or CSV file with a heading row containing at least a *Lesson title* column. *Term*, *Week*, *Module*, *Category of action*, *Lesson no* and *Objectives* are used when present, and the term is worked out from the week if it is not given.
+
+**Ask the AI** reads the coverage figures and writes a short note on what to prioritise. It is sent only lesson titles, weeks and counts — never a student's name or any personal data — and the note is saved with the scheme.
+
+## Previous update: analytics
 
 A new **Analytics** tab. Choose a period, then read what the records actually say. Figures cover only the classes you are allowed to see: the principal and VP see the whole school, a teacher or head of department sees their own classes, and discipline staff see attendance.
 
@@ -77,7 +99,8 @@ If a student is told their record has no date of birth, open **Principal → Stu
 
 ## Steps
 
-1. Open Supabase → SQL Editor → New query. Paste website/supabase/update-003.sql and click Run. Keep the existing database. Do not rerun schema.sql. If you never applied update-002.sql, apply that older update first.
+1. Open Supabase → SQL Editor → New query. Paste website/supabase/update-004.sql and click Run. If you have never applied update-003.sql, run that one first, then update-004.sql.
+1b. (Older deployments only) Paste website/supabase/update-003.sql and click Run. Keep the existing database. Do not rerun schema.sql. If you never applied update-002.sql, apply that older update first.
 2. Unzip this package. Open the existing GitHub repository → Add file → Upload files. Upload the CONTENTS of website/ at the repository root, replacing the existing files. Commit the change. Keep the repository private because api/data/students.json contains student records.
 3. Wait for Vercel to show Ready. Close the school website and installed app, reopen, and refresh. Keep your existing environment variables.
 4. Test the student sign-in: open the portal, choose **Student**, enter one student's matricule and that student's date of birth. A wrong date must be refused.

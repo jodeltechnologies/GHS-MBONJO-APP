@@ -1,4 +1,5 @@
 import bundledStudents from './data/students.json' with {type:'json'};
+import progressionSheets from './data/progression.json' with {type:'json'};
 import {validateQuestions,publicQuestions,gradeAttempt,acceptAnswers} from '../src/exams.js';
 import {enrolment,availableSubjects,academicYear} from '../src/academics.js';
 import {providers,chooseModel} from '../src/providers.js';
@@ -7,7 +8,7 @@ import {effectiveRole,canUseWriter,colleagueContacts} from '../src/posts.js';
 import {writingInstruction,cleanGeneratedText} from '../src/writing-style.js';
 import crypto from 'node:crypto';
 import {attestationText,classes,roles,normalizeMatricule,normalizeBirthDate,validateRecord,generateTimetable,normalizePreferences,studies,reportSummary} from '../src/domain.js';
-import {canRead,canWrite,admin,assigned} from '../src/access.js';
+import {canRead,canWrite,admin,assigned,staff} from '../src/access.js';
 import {schoolAnalytics} from '../src/analytics.js';
 const base=()=>process.env.SUPABASE_URL?.replace(/\/$/,''),key=()=>process.env.SUPABASE_SERVICE_ROLE_KEY;
 const fail=(message,status=400)=>{throw Object.assign(Error(message),{status})};
@@ -57,7 +58,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
  const classNames=[...new Set([...classes,...all.filter(r=>r.kind==='classroom').map(r=>r.data.name)])];
  const enc=encodeURIComponent;
  if(['state','save'].includes(op)){
-  all.push(...await allRecords('kind=in.(resource,post,event,gallery,textbook,document,timetable,document_request,exam_attempt)'));
+  all.push(...await allRecords('kind=in.(resource,post,event,gallery,textbook,document,timetable,document_request,exam_attempt,dept_document,dept_item,progression)'));
   if(op==='state'){
    const cutoff=new Date(Date.now()-30*86400000).toISOString().slice(0,10);
    all.push(...await allRecords('kind=eq.attendance&data->>date=gte.'+cutoff));
@@ -131,6 +132,27 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
    nameFor:id=>staff.get(id)||''});
   return res.json({report,scope:admin(p)?'school':p.role==='discipline'?'attendance':'own classes'});
  }
+ if(op==='messages'){
+  if(!staff(p))fail('Staff access required.',403);
+  const mine=(await allRecords('kind=eq.message')).filter(r=>canRead(p,r,all));
+  const names=new Map(all.filter(r=>r.kind==='profile').map(r=>[r.id,r.data.name]));
+  return res.json({rows:mine.map(r=>({id:r.id,data:{...r.data,fromName:names.get(r.data.fromId)||'',toName:r.data.toId?names.get(r.data.toId)||'':''}})),
+                   colleagues:all.filter(r=>r.kind==='profile'&&r.id!==p.id&&r.data.active!==false&&!['parent'].includes(effectiveRole(r.data.role)))
+                    .map(r=>({id:r.id,name:r.data.name,department:r.data.department||''}))
+                    .sort((a,b)=>a.name.localeCompare(b.name))});
+ }
+ if(op==='progression-catalogue'){
+  if(!staff(p))fail('Staff access required.',403);
+  // Only the headings travel: the full lesson list for one sheet is fetched when
+  // a department actually adopts it, and 785 lessons should not ride on every load.
+  return res.json({sheets:progressionSheets.map(s=>({subject:s.subject,class:s.class,title:s.title,weeklyPeriods:s.weeklyPeriods,lessons:s.lessons.length}))});
+ }
+ if(op==='progression-sheet'){
+  if(!staff(p))fail('Staff access required.',403);
+  const sheet=progressionSheets.find(x=>x.subject===b.subject&&x.class===b.class);
+  if(!sheet)fail('That progression sheet is not one of the supplied ones.',404);
+  return res.json({sheet});
+ }
  if(op==='contacts'){if(!canUseWriter(p))fail('Principal, VP or HOD access required.',403);return res.json({contacts:colleagueContacts(p,all)});}
  if(op==='backup-page'){
   if(p.role!=='principal')fail('Only the principal can export school records.',403);
@@ -139,7 +161,11 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   if(!/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(b.cutoff||''))fail('Invalid backup cutoff.');
   const size=b.table==='records'?1:100;
   const batch=await db(table+'?select=*&order=created_at.asc,id.asc&limit='+size+'&offset='+b.offset+'&created_at=lte.'+encodeURIComponent(b.cutoff));
-  return res.json({rows:batch,more:batch.length===size});
+  // Staff messages and a department's own papers are left out of the export, for
+  // the same reason they are left out of the principal's screens. A transmitted
+  // document has been handed to the administration and is included.
+  const kept=b.table==='records'?batch.filter(r=>r.kind!=='message'&&!(r.kind==='dept_document'&&r.data?.transmitted!==true)):batch;
+  return res.json({rows:kept,more:batch.length===size,skipped:batch.length-kept.length});
  }
  if(op==='audit'){if(p.role!=='principal')fail('Principal access required.',403);return res.json({rows:await db('school_audit?order=created_at.desc&limit=200')});}
  if(op==='provision'){

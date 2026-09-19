@@ -119,6 +119,26 @@ The hard rules are never traded for that: no class and no teacher is ever in two
 
 Generation is deterministic: the same assignments always produce the same timetable, so regenerating does not reshuffle the school without reason.
 
+### The department office
+
+Each head of department has a working area holding the department's papers, its equipment and its progression. Four new record kinds carry it — `dept_document`, `dept_item`, `message` and `progression` — added by `supabase/update-004.sql`.
+
+Documents are filed as reports, minutes, letters or notes. A draft written with the AI assistant can be saved straight into the library. The head of department signs with a signature image stored on their own profile, which is then placed on the document on screen and on the printed letterhead. A document is readable only inside its department until the head of department **transmits** it; transmission requires a signature first, and only then can the principal and vice principal read it. Untransmitted documents and all staff messages are excluded from the PC backup export as well as from the administration's screens.
+
+Equipment is the opposite: the administration can always see a department's inventory, because that is the record of what the department answers for. Only the head of department edits it.
+
+Messages are a running thread per department plus direct notes between colleagues. The principal is not a party to other people's threads and does not see them in the portal. **This is an application rule, not encryption**, and the messages page says so plainly on screen: anyone with the database password can read the rows directly. The portal does not claim a privacy it cannot provide.
+
+These rules sit in `src/access.js` *above* the principal's blanket read and write, which is the only reason they hold. A principal who is also given a department can read that department's records and no other.
+
+### Progression and coverage
+
+Eight progression sheets ship with the app — Computer Science Forms 1 to 4 and Lower and Upper Sixth, and ICT Lower and Upper Sixth — extracted from the 2026-2027 national and departmental sheets into `api/data/progression.json`, 785 lessons in total. A department adopts a sheet, records which school week it is in, and ticks lessons as they are taught. Coverage is then measured against the sheet rather than against the timetable: a lesson counts when somebody marks it taught.
+
+Terms follow the week, as every supplied sheet does: weeks 1 to 12, 13 to 24, and 25 onwards. The module column of the source PDFs is printed vertically and interleaves with its neighbours when extracted, so a module label is kept only where it still reads as words and lessons are grouped by term and week instead.
+
+Departments whose sheet is not bundled import an Excel or CSV file needing only a *Lesson title* column. The AI note is built from counts and lesson titles alone — `coveragePrompt` in `src/department.js` — so no student data is sent to the provider.
+
 ### Analytics
 
 The Analytics tab summarises attendance, results and roll-call coverage over a period the user chooses. Aggregation happens on the server and only the summary is sent to the browser, so a year of attendance never has to cross the wire. Every row is filtered through the same read rules as the rest of the portal before it is counted: the principal and VP see the whole school, a teacher or HOD sees only the classes they are assigned to, discipline staff see attendance. Nothing in `src/analytics.js` decides who may see what — it aggregates whatever it is handed, which keeps the access rules in one place.

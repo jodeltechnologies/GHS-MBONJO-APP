@@ -1,4 +1,4 @@
-const CACHE='ghs-public-fdb99873429ff8bf';
+const CACHE='ghs-public-2e2e9430b040bce6';
 const LAZY=["/chunks/chunk-2RUN43TJ.js","/chunks/chunk-KX3HFV7O.js","/chunks/dist-GWYLXK7M.js","/chunks/exceljs.min-UANE4G3U.js","/chunks/html2canvas-NRGMQH2K.js","/chunks/index.es-6YTEWBBP.js","/chunks/jspdf.es.min-EULL5IBK.js","/chunks/purify.es-DTR4PY74.js"];
 const ASSETS=['/','/index.html','/style.css','/app.js','/install.js','/crest.jpg','/campus.jpg','/icon-192.png','/icon-512.png','/manifest.webmanifest','/fonts/Outfit.ttf','/fonts/Tinos-Regular.ttf','/fonts/Tinos-Bold.ttf'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS))));

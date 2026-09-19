@@ -1,5 +1,6 @@
 import {subjectCatalogue,availableSubjects,recommendSubjects,academicYear,competency} from './academics.js';
 import {barChart,columnChart,lineChart,statTile,figureTable,shorten} from './charts.js';
+import {documentLibrary,categoryLabels,canTransmit,inventorySummary,coverage,coveragePrompt,lessonKey,termOfWeek,parseProgressionRows,TERMS} from './department.js';
 import {providers} from './providers.js';
 import {requestTypes,officialTypes,requestingStaff,requestState} from './document-requests.js';
 import {documentTitles,documentLines,letterheadEN,letterheadFR,displayDate} from './document-layout.js';
@@ -8,7 +9,7 @@ import {postCatalogue,postOptions,whatsappLink} from './posts.js';
 import {exportModel,loadExportAssets,makeDocx,makePdf,downloadBlob} from './exports.js';
 import {encryptBackup} from './backup.js';
 import QRCode from 'qrcode';
-import {classes as baseClasses,departments,roles,normalizeMatricule,promotionEligible,time,clockTime,attestationText,reportSummary,studies,timetablePeriods,timetableBreak,timetableDays,timetableRow,timetableFor,subjectCode,defaultPreferences,normalizePreferences} from './domain.js';
+import {classes as baseClasses,departments,roles,normalizeMatricule,promotionEligible,time,clockTime,attestationText,reportSummary,studies,documentCategories,itemCategories,itemConditions,timetablePeriods,timetableBreak,timetableDays,timetableRow,timetableFor,subjectCode,defaultPreferences,normalizePreferences} from './domain.js';
 import archive from './archive.json';
 const $=s=>document.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let classes=[...baseClasses];
@@ -61,12 +62,12 @@ function publicPage(route){
 function gallery(dept=''){const a=published('gallery').filter(r=>!dept||r.data.department===dept);return `<div class="gallery-grid">${!dept?`<figure><img src="/campus.jpg" alt="School campus"><figcaption>${t('Our campus · Bimbia','Notre campus · Bimbia')}</figcaption></figure>`:''}${a.map(r=>`<figure><img src="${safeImage(r.data.image)}" alt="${esc(r.data.title)}" loading="lazy"><figcaption>${esc(r.data.department)} · ${esc(localized(r.data,'title'))}</figcaption></figure>`).join('')}</div>${dept&&!a.length?empty(t('No photographs have been published for this department yet.','Aucune photographie publiée pour ce département.')):''}`;}
 function safeImage(v){return /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(v||'')?v:'/crest.jpg';}
 function login(){return `<section class="login-wrap"><div class="login-intro"><img src="/crest.jpg" alt="School crest"><p class="eyebrow gold">GHS MBONJO LIMBE</p><h1>${t('Welcome back<br>to your school.','Bienvenue dans<br>votre lycée.')}</h1><p>${t('A shared space for learning, teaching and supporting every student.','Un espace partagé pour apprendre, enseigner et accompagner chaque élève.')}</p></div><div class="login-card"><h2>${t('School portal','Portail scolaire')}</h2><p class="muted">${t('Choose your sign-in method.','Choisissez votre méthode de connexion.')}</p><form id="login-form"><label>${t('I am signing in as','Je me connecte en tant que')}<select name="mode" id="login-mode">${options([['staff',t('Staff member or parent','Personnel ou parent')],['student',t('Student','Élève')]])}</select></label><div id="staff-fields"><label>${t('Email address','Adresse e-mail')}<input type="email" name="email" autocomplete="username" required></label><label>${t('Password','Mot de passe')}<input type="password" name="password" autocomplete="current-password" required></label></div><div id="student-fields" hidden><label>${t('Your matricule','Votre matricule')}<input name="matricule" autocomplete="username"></label><label>${t('Your date of birth','Votre date de naissance')}<input type="date" name="birthDate" autocomplete="bday"></label><small class="muted">${t('Both are needed. They must match your school record. Contact the administration if your date of birth is wrong.','Les deux sont nécessaires et doivent correspondre à votre dossier scolaire. Contactez l’administration si votre date de naissance est incorrecte.')}</small></div><button class="primary full">${t('Sign in securely','Se connecter')}</button><p id="login-error" class="error" role="alert"></p></form><p class="muted small">${t('Need help with your account? Contact the school administration.','Besoin d’aide ? Contactez l’administration du lycée.')}</p>${link(t('← Back to school website','← Retour au site du lycée'),'home','text-link')}</div></section>`;}
-const tabs={overview:'Overview',profile:'My profile',academics:'Classes & subjects',students:'Students',staff:'Staff & roles',assignments:'Teaching assignments',attendance:'Attendance',analytics:'Analytics',resources:'Learning centre',marks:'Marks & report cards',requests:'Document requests',documents:'School documents',timetable:'Timetable',publishing:'Website publishing',ai:'AI writing assistant',settings:'AI settings',audit:'Activity log',backup:'PC backup'};
-const frTabs={overview:'Vue d’ensemble',profile:'Mon profil',academics:'Classes et matières',students:'Élèves',staff:'Personnel et rôles',assignments:'Affectations',attendance:'Assiduité',analytics:'Analyses',resources:'Centre pédagogique',marks:'Évaluations et bulletins',requests:'Demandes de documents',documents:'Documents scolaires',timetable:'Emploi du temps',publishing:'Publications',ai:'Assistant de rédaction IA',settings:'Paramètres IA',audit:'Journal d’activité',backup:'Sauvegarde PC'};
-function allowedTabs(){const r=profile.role;return Object.keys(tabs).filter(k=>({overview:true,academics:['principal','vp'].includes(r),profile:r!=='student',students:['principal','vp','discipline','teacher','hod'].includes(r),staff:r==='principal',assignments:['principal','vp','teacher','hod'].includes(r),attendance:r!=='content_creator',analytics:['principal','vp','teacher','hod','discipline'].includes(r),resources:['principal','vp','teacher','hod','student'].includes(r),requests:r==='principal'||requestingStaff(profile),marks:['principal','vp','teacher','hod','student','parent'].includes(r),documents:['principal','teacher','hod','vp','discipline','staff'].includes(r),timetable:true,publishing:['principal','vp','content_creator'].includes(r)||profile.contentCreator===true,ai:['principal','vp','hod'].includes(r),settings:r==='principal',audit:r==='principal',backup:r==='principal'}[k]));}
+const tabs={overview:'Overview',profile:'My profile',academics:'Classes & subjects',students:'Students',staff:'Staff & roles',assignments:'Teaching assignments',attendance:'Attendance',analytics:'Analytics',department:'My department',messages:'Messages',resources:'Learning centre',marks:'Marks & report cards',requests:'Document requests',documents:'School documents',timetable:'Timetable',publishing:'Website publishing',ai:'AI writing assistant',settings:'AI settings',audit:'Activity log',backup:'PC backup'};
+const frTabs={overview:'Vue d’ensemble',profile:'Mon profil',academics:'Classes et matières',students:'Élèves',staff:'Personnel et rôles',assignments:'Affectations',attendance:'Assiduité',analytics:'Analyses',department:'Mon département',messages:'Messages',resources:'Centre pédagogique',marks:'Évaluations et bulletins',requests:'Demandes de documents',documents:'Documents scolaires',timetable:'Emploi du temps',publishing:'Publications',ai:'Assistant de rédaction IA',settings:'Paramètres IA',audit:'Journal d’activité',backup:'Sauvegarde PC'};
+function allowedTabs(){const r=profile.role;return Object.keys(tabs).filter(k=>({overview:true,academics:['principal','vp'].includes(r),profile:r!=='student',students:['principal','vp','discipline','teacher','hod'].includes(r),staff:r==='principal',assignments:['principal','vp','teacher','hod'].includes(r),attendance:r!=='content_creator',analytics:['principal','vp','teacher','hod','discipline'].includes(r),department:!['student','parent'].includes(r)&&(!!profile.department||r==='principal'||r==='vp'),messages:!['student','parent'].includes(r),resources:['principal','vp','teacher','hod','student'].includes(r),requests:r==='principal'||requestingStaff(profile),marks:['principal','vp','teacher','hod','student','parent'].includes(r),documents:['principal','teacher','hod','vp','discipline','staff'].includes(r),timetable:true,publishing:['principal','vp','content_creator'].includes(r)||profile.contentCreator===true,ai:['principal','vp','hod'].includes(r),settings:r==='principal',audit:r==='principal',backup:r==='principal'}[k]));}
 function portal(){if(!profile)return login();const wanted=new URLSearchParams(location.search).get('tab');if(wanted&&allowedTabs().includes(wanted))tab=wanted;if(!allowedTabs().includes(tab))tab='overview';return `<div class="portal"><aside><div class="portal-identity"><span class="avatar">${esc(profile.name[0])}</span><strong>${esc(profile.name)}</strong>${badge(postCatalogue.find(x=>x.id===(profile.post||profile.role))?.en||profile.role)}</div><nav aria-label="Portal navigation">${allowedTabs().map(k=>button(lang==='fr'?frTabs[k]:tabs[k],'tab',k===tab?'selected':'',`data-tab="${k}"`)).join('')}</nav>${button(t('Sign out','Déconnexion'),'logout','secondary')}</aside><section class="workspace"><div class="workspace-header"><div><p class="eyebrow">GHS MBONJO · ${esc(profile.role.replace('_',' '))}</p><h1>${lang==='fr'?frTabs[tab]:tabs[tab]}</h1></div>${button(t('Refresh','Actualiser'),'refresh','secondary')}</div><label class="portal-jump">${t('Go to','Aller à')}<select id="portal-jump">${options(allowedTabs().map(k=>[k,lang==='fr'?frTabs[k]:tabs[k]]),tab)}</select></label>${portalContent()}</section></div>`;}
 function table(a,cols,edit=true){if(!a.length)return empty(t('No records yet.','Aucun enregistrement.'));return `<div class="table-scroll"><table><thead><tr>${cols.map(c=>`<th>${esc(label(c))}</th>`).join('')}${edit?'<th>Actions</th>':''}</tr></thead><tbody>${a.map(r=>`<tr>${cols.map(c=>`<td>${c==='status'||c==='role'?badge(r.data[c]):['teacherId','studentId'].includes(c)?esc(name(r.data[c])):esc(r.data[c]??'—')}</td>`).join('')}${edit?`<td>${button(t('Open','Ouvrir'),'edit','text-button',`data-id="${r.id}"`)}</td>`:''}</tr>`).join('')}</tbody></table></div>`;}
-const labels={name:'Full name',matricule:'Matricule',class:'Class',birthDate:'Date of birth',birthPlace:'Place of birth',publicServiceDate:'First public-service assumption',schoolAssumptionDate:'Assumption at GHS Mbonjo',authId:'Supabase Auth user ID',salaryIndex:'Salary index',teacherId:'Teacher',studentId:'Student',dueDate:'Due date',submissionMode:'Submission method',titleFr:'Title in French',bodyFr:'Content in French',profileId:'Staff member',dutyDate:'Duty date',issueDate:'Issue date',reference:'Reference number',form5End:'Form 5 closing time',subjects:'Extra subjects (compulsory class subjects are always included)',code:'Short code for the timetable (for example CSC). Leave empty for the default.',officeLabel:'Office label (for example VP Arts or SDM 2)',whatsapp:'WhatsApp number (include country code)',children:'Linked students',periods:'Periods per week'};
+const labels={name:'Full name',matricule:'Matricule',class:'Class',birthDate:'Date of birth',birthPlace:'Place of birth',publicServiceDate:'First public-service assumption',schoolAssumptionDate:'Assumption at GHS Mbonjo',authId:'Supabase Auth user ID',salaryIndex:'Salary index',teacherId:'Teacher',studentId:'Student',dueDate:'Due date',submissionMode:'Submission method',titleFr:'Title in French',bodyFr:'Content in French',profileId:'Staff member',dutyDate:'Duty date',issueDate:'Issue date',reference:'Reference number',form5End:'Form 5 closing time',subjects:'Extra subjects (compulsory class subjects are always included)',code:'Short code for the timetable (for example CSC). Leave empty for the default.',officeLabel:'Office label (for example VP Arts or SDM 2)',whatsapp:'WhatsApp number (include country code)',signature:'Signature image, used on department documents you sign (PNG with a transparent background works best)',children:'Linked students',periods:'Periods per week'};
 const label=k=>labels[k]||k.replace(/([A-Z])/g,' $1').replace(/^./,x=>x.toUpperCase());
 function toolbar(kind,extra=''){return `<div class="toolbar">${button(t('+ Add record','+ Ajouter'),'new','primary',`data-kind="${kind}"`)}${extra}</div>`;}
 function portalContent(){
@@ -82,6 +83,64 @@ function portalContent(){
  if(tab==='resources')return `${isAdmin||['teacher','hod'].includes(r)?toolbar('resource'):''}<div class="resource-grid">${list('resource').map(x=>`<article class="panel"><div class="row">${badge(x.data.type)}${badge(x.data.status)}</div><h3>${esc(x.data.title)}</h3><p>${esc(x.data.class)} · ${esc(x.data.subject)}</p><p class="muted">${esc(x.data.dueDate||'')} · ${esc(x.data.submissionMode)}</p>${button(t('Open resource','Ouvrir la ressource'),'resource','primary',`data-id="${x.id}"`)}</article>`).join('')||empty(t('No learning resources available yet.','Aucune ressource disponible.'))}</div><h2>Timed assessment attempts</h2>${list('exam_attempt').map(a=>`<article class="panel row"><div><strong>${esc(name(a.data.studentId))}</strong><p>${esc(a.data.title)} · ${badge(a.data.status)}</p></div>${profile.role!=='student'&&a.data.status!=='in_progress'?button('Mark written answers','review-exam','secondary',`data-id="${a.id}"`):''}</article>`).join('')}<h2>${t('Submissions','Travaux remis')}</h2>${table(list('submission'),['studentId','body','feedback','score'],profile.role!=='student')}`;
  if(tab==='marks')return `${['principal','vp','teacher','hod'].includes(r)?`<form id="marks-query" class="panel form-grid"><label>Academic year<input name="year" required value="${esc(marksYear)}" pattern="[0-9]{4}/[0-9]{4}"></label><label>Class<select name="class"><option value="">All permitted classes</option>${options(classes,marksClass)}</select></label><button class="primary">Load marks</button><p class="wide muted">Includes draft and published marks you are permitted to view. Choose another year to see earlier records.</p></form>`:''}${isAdmin||['teacher','hod'].includes(r)?toolbar('mark'):''}<div class="panel"><h2>${t('Print report cards','Imprimer les bulletins')}</h2><form id="report-form" class="form-grid"><label>${t('Class','Classe')}<select name="class">${options(classes)}</select></label><label>${t('Assessment','Évaluation')}<select name="assessment">${options([...Array.from({length:6},(_,i)=>`Sequence ${i+1}`),'Promotion exam'])}</select></label><label>${t('Academic year','Année scolaire')}<input name="year" value="2026/2027" required></label><label>Output<select name="output"><option value="reports">Individual report cards</option><option value="master">Master result sheet</option></select></label><button class="primary">${t('Preview class reports','Aperçu des bulletins')}</button></form></div><p class="muted">${t('Six sequence tests. Promotion exams apply only to Forms 1–4 and Lower Sixth. Blank marks are not zero.','Six séquences. L’examen de promotion concerne uniquement les Forms 1–4 et Lower Sixth. Une note vide n’est pas un zéro.')}</p>${table(list('mark'),['studentId','subject','assessment','mark','coefficient','status'],isAdmin||['teacher','hod'].includes(r))}`;
  if(tab==='documents')return `${r==='principal'?toolbar('document',button('Other official documents','official-letter','secondary')+button(t('Bulk issue','Émission en lot'),'bulk-docs','secondary')):''}${list('document').map(x=>`<article class="panel row"><div><h3>${esc(x.data.title||x.data.name)}</h3><p>${esc(x.data.reference)} · ${esc(x.data.kind)} ${badge(x.data.status)}</p></div><div class="actions">${button(t('Print','Imprimer'),'print-document','secondary',`data-id="${x.id}"`)}${r==='principal'&&x.data.status==='issued'?button(t('Revoke','Révoquer'),'revoke','danger',`data-id="${x.id}"`):''}</div></article>`).join('')||empty(t('No attestations issued yet.','Aucune attestation délivrée.'))}`;
+ if(tab==='department'){
+  const dept=deptFilter||profile.department||'';
+  const picker=admin(profile)?`<label>${t('Department','Département')}<select id="dept-pick">${options([['',t('Choose a department','Choisir un département')],...departments.map(d=>[d,d])],dept)}</select></label>`:'';
+  if(!dept)return `<div class="panel">${picker||`<p class="notice">${t('Your profile has no department yet. Ask the principal to set it in Staff & roles.','Aucun département n’est associé à votre profil. Demandez au proviseur de le renseigner.')}</p>`}</div>`;
+  const isHod=profile.role==='hod'&&profile.department===dept;
+  const docs=list('dept_document').filter(x=>x.data.department===dept);
+  const items=list('dept_item').filter(x=>x.data.department===dept);
+  const prog=list('progression').filter(x=>x.data.department===dept);
+  const lib=documentLibrary(docs),inv=inventorySummary(items);
+  const staffHere=list('profile').filter(x=>x.data.department===dept&&x.data.active!==false);
+  const adminOnly=admin(profile)&&!isHod;
+
+  const head=`<div class="panel an-head"><div><p class="eyebrow">${t('DEPARTMENT','DÉPARTEMENT')}</p><h2>${esc(dept)}</h2>
+   <p class="muted small">${staffHere.length} ${t('staff','enseignants')}${isHod?' · '+t('You are the head of department','Vous êtes chef de département'):''}</p></div>${picker}</div>`;
+
+  const tiles=`<div class="stats an-stats">
+   ${statTile(t('Documents','Documents'),adminOnly?lib.transmitted:lib.total,{note:adminOnly?t('transmitted to the administration','transmis à l’administration'):`${lib.signed} ${t('signed','signés')} · ${lib.transmitted} ${t('transmitted','transmis')}`})}
+   ${statTile(t('Equipment','Équipement'),inv.items,{note:`${inv.working} ${t('working','en état')} · ${inv.faulty} ${t('need repair','à réparer')}`,tone:inv.faulty?'fair':'good'})}
+   ${statTile(t('Out of service','Hors service'),inv.dead,{tone:inv.dead?'poor':'good'})}
+   ${statTile(t('Schemes tracked','Progressions suivies'),prog.length,{note:t('progression sheets','fiches de progression')})}
+  </div>`;
+
+  // --- documents ---
+  const docCard=r=>{
+   const d=r.data;
+   return `<article class="dept-doc"><div><h4>${esc(d.title)}</h4>
+    <p class="muted small">${esc(d.date||'')} · ${esc(nameOrSelf(d.authorId))}${d.status==='signed'?` · <b class="ok">${t('signed','signé')}</b>`:` · ${t('draft','brouillon')}`}${d.transmitted?` · <b class="ok">${t('transmitted','transmis')}</b>`:''}</p></div>
+    <div class="actions">${button(t('Open','Ouvrir'),'dept-doc-open','secondary',`data-id="${r.id}"`)}
+    ${!adminOnly&&isHod&&d.status!=='signed'?button(t('Sign','Signer'),'dept-doc-sign','secondary',`data-id="${r.id}"`):''}
+    ${!adminOnly&&isHod&&canTransmit(d)?button(t('Transmit to principal','Transmettre au proviseur'),'dept-doc-transmit','primary',`data-id="${r.id}"`):''}</div></article>`;
+  };
+  const documents=`<div class="panel"><div class="row"><h3>${t('Department documents','Documents du département')}</h3>
+   ${adminOnly?'':`<div class="actions">${button(t('New document','Nouveau document'),'dept-doc-new','primary')}</div>`}</div>
+   ${adminOnly?`<p class="muted small">${t('Only documents the head of department has transmitted appear here.','Seuls les documents transmis par le chef de département apparaissent ici.')}</p>`:''}
+   ${documentCategories.map(c=>{
+     const inCat=adminOnly?lib.byCategory[c].filter(x=>x.data.transmitted):lib.byCategory[c];
+     return `<details class="tt-more"${inCat.length?' open':''}><summary>${esc(t(categoryLabels[c],categoryLabels[c]))} · ${inCat.length}</summary>
+      ${inCat.length?inCat.map(docCard).join(''):`<p class="chart-empty">${t('Nothing filed here yet.','Rien de classé ici pour l’instant.')}</p>`}</details>`;
+    }).join('')}
+  </div>`;
+
+  // --- inventory ---
+  const inventory=`<div class="panel"><div class="row"><h3>${t('Department equipment','Équipement du département')}</h3>
+   ${isHod?`<div class="actions">${button(t('Add equipment','Ajouter un équipement'),'dept-item-new','primary')}</div>`:''}</div>
+   <p class="muted small">${t('The administration can always see this list. It is the department’s record of what it answers for.','L’administration a toujours accès à cette liste. C’est l’inventaire dont le département répond.')}</p>
+   ${items.length?`<div class="table-scroll"><table><thead><tr><th>${t('Item','Article')}</th><th>${t('Category','Catégorie')}</th><th>${t('Qty','Qté')}</th><th>${t('Condition','État')}</th><th>${t('Location','Emplacement')}</th><th>${t('Serial / tag','N° de série')}</th>${isHod?'<th></th>':''}</tr></thead><tbody>
+    ${items.sort((a,b)=>String(a.data.name).localeCompare(String(b.data.name))).map(r=>`<tr>
+     <td>${esc(r.data.name)}</td><td>${esc(r.data.category)}</td><td>${esc(r.data.quantity??1)}</td>
+     <td><span class="badge ${r.data.condition==='working'||!r.data.condition?'published':r.data.condition==='needs repair'?'pending':'rejected'}">${esc(r.data.condition||'working')}</span></td>
+     <td>${esc(r.data.location||'—')}</td><td>${esc(r.data.serial||'—')}</td>
+     ${isHod?`<td>${button(t('Edit','Modifier'),'edit','text-button',`data-id="${r.id}"`)}</td>`:''}</tr>`).join('')}
+   </tbody></table></div>`:`<p class="chart-empty">${t('No equipment recorded yet.','Aucun équipement enregistré.')}</p>`}
+   ${inv.byCategory.length?barChart(inv.byCategory.map(c=>({key:c.key,value:c.items})),{max:Math.max(...inv.byCategory.map(c=>c.items)),unit:'',label:'Equipment by category'}):''}
+  </div>`;
+
+  return head+tiles+documents+inventory+progressionPanel(dept,prog,isHod||!adminOnly);
+ }
+ if(tab==='messages')return messagesPanel();
  if(tab==='analytics'){
   const classOptions=[...new Set(list('assignment').map(r=>r.data.class))].sort();
   const controls=`<form id="analytics-form" class="panel">
@@ -113,7 +172,7 @@ function portalContent(){
   return generator+mine+classPanel+staffPanel;
  }
  if(tab==='publishing')return `${isAdmin?button('Import supplied activities','import-calendar','secondary'):''}<div class="toolbar">${['post','event','gallery','textbook'].map(k=>button('+ '+label(k),'new','primary',`data-kind="${k}"`)).join('')}</div>${['post','event','gallery','textbook'].map(k=>`<h2>${label(k)}</h2>${table(list(k),['title','status'])}`).join('')}`;
- if(tab==='ai')return `<div class="panel narrow"><form id="ai-form"><p>${t('Draft a message, review it, then choose where to publish it.','Rédigez un message, relisez-le, puis choisissez où le publier.')}</p><p class="notice">Your school writing guide is applied automatically. Enter only the facts needed for this message.</p><label>Document title<input id="writing-title" value="School message"></label><label>${t('Facts to include','Faits à inclure')}<textarea name="prompt" rows="6" required placeholder="Audience, purpose, confirmed dates and key points"></textarea></label><label>${t('Writing guide / style','Guide / style de rédaction')}<textarea name="style" rows="3" placeholder="Paste your preferred writing guide here"></textarea></label><label>${t('Language','Langue')}<select name="language">${options([['en','English'],['fr','Français']],lang)}</select></label><button class="primary">${t('Generate draft','Générer un brouillon')}</button><label>${t('Editable draft','Brouillon modifiable')}<textarea id="ai-result" rows="12"></textarea></label>${['principal','vp'].includes(r)||profile.contentCreator?button(t('Use as announcement','Utiliser comme annonce'),'ai-announcement','secondary'):''}<div class="actions">${button('Save Word (.docx)','export-writing','secondary','data-format="docx"')}${button('Save PDF','export-writing','secondary','data-format="pdf"')}${button('Print','print-writing','secondary')}</div></form><section class="panel"><h2>Write to a colleague on WhatsApp</h2>${button('Load department contacts','contacts','secondary')}<div id="colleague-picker"></div></section></div>`;
+ if(tab==='ai')return `<div class="panel narrow"><form id="ai-form"><p>${t('Draft a message, review it, then choose where to publish it.','Rédigez un message, relisez-le, puis choisissez où le publier.')}</p><p class="notice">Your school writing guide is applied automatically. Enter only the facts needed for this message.</p><label>Document title<input id="writing-title" value="School message"></label><label>${t('Facts to include','Faits à inclure')}<textarea name="prompt" rows="6" required placeholder="Audience, purpose, confirmed dates and key points"></textarea></label><label>${t('Writing guide / style','Guide / style de rédaction')}<textarea name="style" rows="3" placeholder="Paste your preferred writing guide here"></textarea></label><label>${t('Language','Langue')}<select name="language">${options([['en','English'],['fr','Français']],lang)}</select></label><button class="primary">${t('Generate draft','Générer un brouillon')}</button><label>${t('Editable draft','Brouillon modifiable')}<textarea id="ai-result" rows="12"></textarea></label>${['principal','vp'].includes(r)||profile.contentCreator?button(t('Use as announcement','Utiliser comme annonce'),'ai-announcement','secondary'):''}${profile.department?button(t('Save to my department','Enregistrer dans mon département'),'ai-save-department','secondary'):''}<div class="actions">${button('Save Word (.docx)','export-writing','secondary','data-format="docx"')}${button('Save PDF','export-writing','secondary','data-format="pdf"')}${button('Print','print-writing','secondary')}</div></form><section class="panel"><h2>Write to a colleague on WhatsApp</h2>${button('Load department contacts','contacts','secondary')}<div id="colleague-picker"></div></section></div>`;
  if(tab==='settings')return `<form id="settings-form" class="panel narrow"><h2>AI writing provider</h2><p>Select a provider and paste its API key. The app selects the writing model automatically.</p><label>Provider<select name="provider">${options(Object.entries(providers).map(([id,p])=>[id,p.label]))}</select></label><label>API key<input type="password" name="key" required autocomplete="off"></label><p class="muted">Free tiers and trial credits have limits. Grok is not guaranteed free. OpenRouter uses its free-model router.</p><button class="primary">Save encrypted API key</button></form>`;
  if(tab==='backup')return `<form id="backup-form" class="panel narrow"><h2>Save school records to your PC</h2><p>This downloads an encrypted export of school records, photographs and the activity log. Account passwords, AI keys and hosting settings are excluded.</p><p>Pause record editing during the export. It reads records in pages, so it is not a database snapshot.</p><label>Backup password<input type="password" name="password" minlength="12" autocomplete="new-password" required></label><label>Confirm password<input type="password" name="confirm" minlength="12" autocomplete="new-password" required></label><p>Keep this password separately. It is needed to open the backup.</p><button class="primary">Download encrypted backup</button><p id="backup-progress" role="status"></p></form>`;
  if(tab==='audit')return `<div id="audit-content">${button(t('Load recent activity','Charger l’activité récente'),'audit','primary')}</div>`;
@@ -130,6 +189,87 @@ async function saveExam(submit=false){if(examSaving){if(submit)examSubmitPending
 let answerSaveTimer;document.addEventListener('input',e=>{if(e.target.closest('#exam-form')){clearTimeout(answerSaveTimer);answerSaveTimer=setTimeout(()=>saveExam().catch(err=>{if($('#exam-save-status'))$('#exam-save-status').textContent='Not saved. Check your connection.';toast(err.message);}),600);}});
 function requestsPanel(compact=false){const a=list('document_request').filter(r=>!compact||requestState(r,list('document')).status==='pending');return `${!compact&&requestingStaff(profile)?button('Request a document','request-document','primary'):''}${a.length?a.map(r=>{const state=requestState(r,list('document'));return `<article class="panel request-card"><div><h3>${esc(r.data.name)}</h3><p>${esc(r.data.requestType)} · ${badge(state.status)}</p><p>${esc(r.data.purpose)}</p>${r.data.reviewComment?`<p>${esc(r.data.reviewComment)}</p>`:''}</div><div class="actions">${state.status==='pending'?(profile.role==='principal'?button('Prepare document','fulfil-request','primary',`data-id="${r.id}"`)+button('Decline','reject-request','secondary',`data-id="${r.id}"`):button('Cancel request','cancel-request','secondary',`data-id="${r.id}"`)):state.documentId?button('Open issued document','print-document','primary',`data-id="${state.documentId}"`):''}</div></article>`;}).join(''):empty('No document requests to show.')}`;}
 function officialLetter(request=null){modal('Official letterhead document',`<form id="official-letter-form" data-request="${request?.id||''}"><div class="form-grid"><label>Document type<select name="letterType">${options(officialTypes,request?'Employment confirmation':'Custom letter')}</select></label><label>Reference number<input name="reference" required></label><label>Issue date<input name="issueDate" type="date" value="${today()}" required></label><label>Recipient<input name="recipient" value="${esc(request?.data.name||'')}" required></label><label class="wide">Subject heading<input name="title" maxlength="160" value="${request?'CONFIRMATION OF EMPLOYMENT':''}" required></label><label class="wide">Document body<textarea name="body" rows="12" maxlength="12000" required placeholder="Enter the complete official text. Include confirmed names, dates and details only."></textarea></label></div><p>The subject is centred and underlined, like the attestations. Review the wording before issuing.</p><button class="primary">Issue and preview</button></form>`);}
+// --- Department office --------------------------------------------------------
+// The head of department's own working area: the paper they write and sign, the
+// equipment they answer for, and how far the subject has actually got through its
+// progression sheet. The administration sees the equipment always and a document
+// only once it has been transmitted.
+let deptFilter='',msgThread='',msgRows=[],msgColleagues=[],msgLoaded=false;
+let progSheets=[],progSheetCache={},progPick={subject:'',class:''},progWeek='';
+const nameOrSelf=id=>id===profile.id?t('you','vous'):name(id);
+const admin=p=>['principal','vp'].includes(p.role);
+const todayISO=()=>new Date().toISOString().slice(0,10);
+
+function progressionPanel(dept,records,mayEdit){
+ const rows=records.slice().sort((a,b)=>String(a.data.subject+a.data.class).localeCompare(String(b.data.subject+b.data.class)));
+ const cards=rows.map(r=>{
+  const d=r.data,c=coverage(d.lessons||[],d.taught||{},{currentWeek:d.currentWeek||null});
+  const tone=c.onTrack===null?'':c.onTrack?'good':'poor';
+  return `<article class="panel prog-card">
+   <div class="row"><div><h4>${esc(d.subject)} · ${esc(d.class)}</h4>
+    <p class="muted small">${esc(d.year||'')} · ${c.total} ${t('lessons in the scheme','leçons au programme')}${d.sourceTitle?` · ${esc(shorten(d.sourceTitle,60))}`:''}</p></div>
+    <div class="actions">${mayEdit?button(t('Mark lessons','Pointer les leçons'),'prog-open','secondary',`data-id="${r.id}"`):''}${mayEdit?button(t('Ask the AI','Demander à l’IA'),'prog-advice','secondary',`data-id="${r.id}"`):''}</div></div>
+   <div class="stats an-stats">
+    ${statTile(t('Covered','Couvert'),c.rate,{unit:'%',note:`${c.taught} ${t('of','sur')} ${c.total}`,tone})}
+    ${statTile(t('Expected by now','Attendu à ce jour'),c.expected===null?null:c.expected,{note:c.currentWeek?`${t('week','semaine')} ${c.currentWeek}`:t('set the current week','indiquez la semaine'),tone:''})}
+    ${statTile(t('Behind','Retard'),c.behind===null?null:c.behind,{note:t('lessons','leçons'),tone:c.behind?'poor':'good'})}
+   </div>
+   ${c.byTerm.length?columnChart(c.byTerm.map(x=>({key:x.key.replace(' Term',''),value:x.rate,note:`${x.taught}/${x.total}`})),{label:'Coverage by term'}):''}
+   ${c.next?`<p class="muted small">${t('Next untaught','Prochaine leçon non traitée')}: ${t('week','semaine')} ${esc(c.next.week)}${c.next.number?` · ${t('lesson','leçon')} ${esc(c.next.number)}`:''} — ${esc(c.next.title)}</p>`:`<p class="muted small">${t('Every lesson in the scheme is marked taught.','Toutes les leçons du programme sont pointées.')}</p>`}
+   ${d.advice?`<details class="tt-more"><summary>${t('AI note','Note de l’IA')}</summary><div class="prose">${esc(d.advice)}</div><p class="muted small">${t('Written by the AI from the counts above. Check it before acting on it.','Rédigé par l’IA à partir des chiffres ci-dessus. Vérifiez avant d’agir.')}</p></details>`:''}
+  </article>`;
+ }).join('');
+ return `<div class="panel"><div class="row"><h3>${t('Progression and coverage','Progression et couverture')}</h3>
+  ${mayEdit?`<div class="actions">${button(t('Track a scheme','Suivre un programme'),'prog-add','primary')}${button(t('Import a sheet','Importer une fiche'),'prog-import','secondary')}</div>`:''}</div>
+  <p class="muted small">${t('Coverage is measured against the progression sheet, not against the timetable: a lesson counts when someone marks it taught.','La couverture est mesurée par rapport à la fiche de progression : une leçon compte lorsqu’elle est pointée.')}</p>
+  ${rows.length?'':`<p class="chart-empty">${t('No scheme is being tracked yet.','Aucun programme suivi pour l’instant.')}</p>`}</div>${cards}`;
+}
+
+// --- Messages -----------------------------------------------------------------
+// Direct notes between colleagues and one running thread per department. The
+// principal is not a member of these threads and does not see them in the portal;
+// the page says plainly that this is not protection from whoever administers the
+// database, because it is not.
+async function loadMessages(){
+ try{const r=await api('messages');msgRows=r.rows;msgColleagues=r.colleagues;msgLoaded=true;}
+ catch(err){msgRows=[];msgColleagues=[];msgLoaded=true;toast(err.message);}
+}
+function messagesPanel(){
+ if(!msgLoaded)return `<div class="panel"><h2>${t('Messages','Messages')}</h2><p class="chart-empty">${t('Loading…','Chargement…')}</p></div>`;
+ const dept=profile.department||'';
+ const threads=[];
+ if(dept)threads.push({id:'dept:'+dept,label:`${dept} · ${t('department','département')}`,scope:'department'});
+ const partners=new Map();
+ for(const m of msgRows){
+  if(m.data.scope!=='direct')continue;
+  const other=m.data.fromId===profile.id?m.data.toId:m.data.fromId;
+  const label=m.data.fromId===profile.id?m.data.toName:m.data.fromName;
+  if(other&&!partners.has(other))partners.set(other,label||name(other));
+ }
+ for(const [id,label] of partners)threads.push({id:'direct:'+id,label,scope:'direct'});
+ const active=msgThread||threads[0]?.id||'';
+ const inThreadRows=msgRows.filter(m=>{
+  if(active.startsWith('dept:'))return m.data.scope==='department'&&m.data.department===active.slice(5);
+  const who=active.slice(7);
+  return m.data.scope==='direct'&&(m.data.fromId===who||m.data.toId===who);
+ }).sort((a,b)=>String(a.data.at||'').localeCompare(String(b.data.at||'')));
+
+ const list_=threads.map(x=>`<button class="msg-thread${x.id===active?' selected':''}" data-action="msg-open" data-id="${esc(x.id)}">${esc(x.label)}</button>`).join('')
+  ||`<p class="muted small">${t('No conversations yet.','Aucune conversation.')}</p>`;
+ const bubbles=inThreadRows.map(m=>`<div class="msg${m.data.fromId===profile.id?' mine':''}">
+   <span class="msg-who">${esc(m.data.fromId===profile.id?t('You','Vous'):m.data.fromName||name(m.data.fromId))}</span>
+   <p>${esc(m.data.body)}</p><span class="msg-at">${esc(String(m.data.at||'').slice(0,16).replace('T',' '))}</span></div>`).join('')
+  ||`<p class="chart-empty">${t('No messages in this conversation yet.','Aucun message dans cette conversation.')}</p>`;
+
+ return `<div class="panel"><div class="row"><h2>${t('Messages','Messages')}</h2>
+   <div class="actions">${button(t('Write to a colleague','Écrire à un collègue'),'msg-new','secondary')}</div></div>
+  <p class="notice">${t('These conversations are between the staff in them and are not shown to the principal in the portal. They are not encrypted: whoever administers the school database can read them there. Do not use this for anything that must stay truly private.','Ces conversations ne sont pas affichées au proviseur dans le portail, mais elles ne sont pas chiffrées : l’administrateur de la base de données peut les lire. N’y placez rien qui doive rester strictement confidentiel.')}</p>
+  <div class="msg-wrap"><aside class="msg-list">${list_}</aside>
+   <div class="msg-panel"><div class="msg-scroll">${bubbles}</div>
+    ${active?`<form id="msg-form" data-thread="${esc(active)}"><textarea name="body" rows="2" required placeholder="${esc(t('Write a message','Écrire un message'))}"></textarea><button class="primary">${t('Send','Envoyer')}</button></form>`:''}
+   </div></div></div>`;
+}
+
 // --- Analytics ----------------------------------------------------------------
 // Every figure is shown with the count it came from. A class with no roll call
 // reads as "no records", never as 0%, because the two mean opposite things.
@@ -334,7 +474,7 @@ const field=(key,type='text',values=null,required=false)=>({key,type,values,requ
 function fields(kind){const staff=()=>list('profile').map(r=>[r.id,r.data.name]),students=()=>list('student').map(r=>[r.id,`${r.data.name} · ${r.data.class}`]);const subjects=availableSubjects(rows).filter(x=>['principal','vp'].includes(profile.role)||x.department===profile.department).map(x=>x.name);const f=field;const status=f('status','select',['draft','pending','published','rejected'],true);return {
  classroom:[f('name','text',null,true),f('stream','select',['General','Arts','Science'],true),f('subjects','multiselect',availableSubjects(rows).map(x=>[x.name,x.name])),f('active','select',['true','false'])],
  subject:[f('name','text',null,true),f('code'),f('department','select',departments,true),f('group','select',['shared','arts','science','elective']),f('coefficient','number',null,true)],
- profile:[f('name','text',null,true),f('matricule'),f('authId'),f('role','select',postOptions(lang),true),f('officeLabel'),f('contentCreator','select',['false','true']),f('department','select',['',...departments]),f('active','select',['true','false']),f('birthDate','date'),f('birthPlace'),f('gender','select',['','Female','Male']),f('publicServiceDate','date'),f('schoolAssumptionDate','date'),f('rank'),f('salaryIndex'),f('phone'),f('whatsapp'),f('bio','textarea'),f('children','multiselect',students()),f('photo','image')],
+ profile:[f('name','text',null,true),f('matricule'),f('authId'),f('role','select',postOptions(lang),true),f('officeLabel'),f('contentCreator','select',['false','true']),f('department','select',['',...departments]),f('active','select',['true','false']),f('birthDate','date'),f('birthPlace'),f('gender','select',['','Female','Male']),f('publicServiceDate','date'),f('schoolAssumptionDate','date'),f('rank'),f('salaryIndex'),f('phone'),f('whatsapp'),f('bio','textarea'),f('children','multiselect',students()),f('photo','image'),f('signature','image')],
  student:[f('name','text',null,true),f('matricule','text',null,true),f('class','select',classes,true),f('birthDate','date',null,true),f('birthPlace','text',null,true),f('gender','select',['Female','Male'],true),f('phone'),f('subjects','multiselect',availableSubjects(rows).map(x=>[x.name,x.name])),f('status','select',['active','promoted','demoted','dismissed','transferred out']),f('photo','image')],
  assignment:[f('teacherId','select',staff(),true),f('class','select',classes,true),f('subject','select',subjects,true),f('department','select',departments,true),f('periods','number',null,true)],
  resource:[f('title','text',null,true),f('type','select',['note','quiz','test','assignment','homework'],true),f('class','select',classes,true),f('subject','select',subjects,true),f('department','select',departments,true),f('body','textarea'),f('attachment','file'),f('durationMinutes','number'),f('submissionMode','select',['online','in class'],true),f('dueDate','date'),status,f('reviewComment','textarea')],
@@ -354,7 +494,21 @@ function reportHTML(student,marks,assessment,year,peers,stats,subjects=[],subjec
 function masterHTML(reports,assessment,year,cls){const subjects=[...new Set(reports.flatMap(r=>r.subjects||r.marks.map(m=>m.data.subject)))],stats=reports[0]?.stats,assessed=reports.filter(r=>r.marks.length);return `<article class="print-page master-sheet">${schoolLetterhead()}<h2>MASTER RESULT SHEET / FICHE RÉCAPITULATIVE DES RÉSULTATS</h2><p class="center">${esc(cls)} · ${esc(assessment)} · ${esc(year)}</p><table><thead><tr><th>No.</th><th>Student / Élève</th>${subjects.map(s=>`<th class="vertical-subject">${esc(s)}</th>`).join('')}<th>Papers sat</th><th>Weighted total</th><th>Average /20</th><th>Rank</th></tr></thead><tbody>${reports.map((r,i)=>{const sum=reportSummary(r.marks.map(m=>m.data));return `<tr><td>${i+1}</td><td>${esc(r.student.data.name)}</td>${subjects.map(subject=>{const m=r.marks.find(m=>m.data.subject===subject);return `<td>${m?esc(m.data.grade||m.data.mark):'—'}</td>`}).join('')}<td>${r.marks.length}</td><td>${sum.total.toFixed(2)}</td><td>${sum.average?.toFixed(2)??'—'}</td><td>${r.stats.rank??'—'}</td></tr>`}).join('')}</tbody></table><p>Number on roll: ${reports.length} · Assessed: ${assessed.length} · Class average: ${stats?.classAverage?.toFixed(2)??'—'} · Highest: ${stats?.highest?.toFixed(2)??'—'} · Lowest: ${stats?.lowest?.toFixed(2)??'—'}</p><p>Cells show an entered letter grade, otherwise the mark out of 20. Missing results are shown as —. Published marks only. Paper pass totals require the school's confirmed pass rules.</p></article>`;}
 let importDraft=[];
 function csvRows(text){const result=[];let row=[],cell='',quoted=false;for(let i=0;i<text.length;i++){const c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){cell+='"';i++;}else quoted=!quoted;}else if(c===','&&!quoted){row.push(cell);cell='';}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&text[i+1]==='\n')i++;row.push(cell);if(row.some(x=>x.trim()))result.push(row);row=[];cell='';}else cell+=c;}row.push(cell);if(row.some(x=>x.trim()))result.push(row);if(quoted)throw Error('Unclosed quote in CSV.');return result;}
-async function prepareImport(file,kind,dateOrder){let matrix;if(file.name.toLowerCase().endsWith('.xlsx')){const ExcelJS=(await import('exceljs')).default;const w=new ExcelJS.Workbook();await w.xlsx.load(await file.arrayBuffer());matrix=[];w.worksheets[0].eachRow(r=>matrix.push(r.values.slice(1).map(v=>v instanceof Date?v.toISOString().slice(0,10):typeof v==='object'&&v!==null?v.text||v.result||'':v)));}else matrix=csvRows(await file.text());
+// Reads a spreadsheet or CSV into a plain array of rows. ExcelJS is loaded only
+// when an .xlsx actually arrives, so the chunk stays out of the initial download.
+async function readSheet(file){
+ if(!file)throw Error('Choose a file first.');
+ if(file.size>4000000)throw Error('Use a file smaller than 4 MB.');
+ if(file.name.toLowerCase().endsWith('.xlsx')){
+  const ExcelJS=(await import('exceljs')).default;
+  const w=new ExcelJS.Workbook();await w.xlsx.load(await file.arrayBuffer());
+  const matrix=[];
+  w.worksheets[0].eachRow(r=>matrix.push(r.values.slice(1).map(v=>v instanceof Date?v.toISOString().slice(0,10):typeof v==='object'&&v!==null?v.text||v.result||'':v)));
+  return matrix;
+ }
+ return csvRows(await file.text());
+}
+async function prepareImport(file,kind,dateOrder){const matrix=await readSheet(file);
  const start=matrix.findIndex(r=>r.some(v=>/^(name|student|full name)$/i.test(String(v).trim())));if(start<0)throw Error('A Name or Student header is required.');const headers=matrix[start].map(x=>String(x).trim().toLowerCase());const aliases={student:'name','full name':'name','date of birth':'birthDate','place of birth':'birthPlace','phone number':'phone','whatsapp number':'whatsapp','mat. no or eci':'matricule','sex':'gender','date of entry into pub. service':'publicServiceDate','date of entry into present position':'schoolAssumptionDate','salary index':'salaryIndex','telephone number':'phone'};const keys=fields(kind).map(f=>f.key);importDraft=matrix.slice(start+1).filter(r=>r.some(x=>x)).map((r,i)=>{const d={};headers.forEach((h,j)=>{const k=aliases[h]||keys.find(k=>k.toLowerCase()===h);if(k)d[k]=String(r[j]??'').trim();});d.name=d.name?.trim();d.matricule=normalizeMatricule(d.matricule);d.gender=d.gender==='F'?'Female':d.gender==='M'?'Male':d.gender;if(kind==='student'){d.status='active';if(!classes.includes(d.class))d.class='';}else{d.role='teacher';d.active=true;d.contentCreator=false;d.department=departments.includes(d.department)?d.department:'';delete d.authId;}
  for(const k of ['birthDate','publicServiceDate','schoolAssumptionDate'])if(d[k]&&/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(d[k])){const a=d[k].split('/');d[k]=`${a[2]}-${(dateOrder==='dmy'?a[1]:a[0]).padStart(2,'0')}-${(dateOrder==='dmy'?a[0]:a[1]).padStart(2,'0')}`;}
  const errors=[];if(!d.name)errors.push('Missing name');if(kind==='student'&&(!d.matricule||!d.class||!d.birthDate||!d.birthPlace||!['Male','Female'].includes(d.gender)))errors.push('Missing or invalid required student field');if(d.birthDate&&(!/^\d{4}-\d{2}-\d{2}$/.test(d.birthDate)||!Number.isFinite(Date.parse(d.birthDate))))errors.push('Invalid date');if(d.matricule&&list(kind).some(x=>normalizeMatricule(x.data.matricule)===d.matricule))errors.push('Matricule already exists');return {data:d,row:i+start+2,errors};});
@@ -377,7 +531,7 @@ document.addEventListener('click',async e=>{const el=e.target.closest('[data-act
  if(action==='language'){lang=lang==='en'?'fr':'en';localStorage.setItem('school-language',lang);render();}
  if(action==='menu'){const open=$('#nav').classList.toggle('open');el.setAttribute('aria-expanded',String(open));}
  if(action==='close')$('#modal').close();
- if(action==='tab'){tab=el.dataset.tab;if(!globalThis.SCHOOL_PREVIEW)history.pushState({},'','/portal?tab='+tab);render();window.scrollTo(0,0);}
+ if(action==='tab'){tab=el.dataset.tab;if(tab==='messages'&&!msgLoaded)loadMessages().then(render);if(!globalThis.SCHOOL_PREVIEW)history.pushState({},'','/portal?tab='+tab);render();window.scrollTo(0,0);}
  if(action==='refresh')await refresh();
  if(action==='logout'){await api('logout');profile=null;rows=[];navigate('login');render();}
  if(action==='official-letter')officialLetter();
@@ -413,6 +567,147 @@ document.addEventListener('click',async e=>{const el=e.target.closest('[data-act
   toast(t('Preferences reset. Generate to apply them.','Préférences réinitialisées. Générez pour les appliquer.'));
  }
  if(action==='print-analytics'&&anReport)printView(`<article class="print-page an-print"><h1>GHS Mbonjo Limbe · ${esc(t('Analytics','Analyses'))}</h1><p>${esc(anFrom)} → ${esc(anTo)}${anClass?' · '+esc(anClass):''}</p>${analyticsView(anReport)}</article>`);
+ // --- department documents ---
+ if(action==='dept-doc-new'||action==='dept-doc-edit'){
+  const old=action==='dept-doc-edit'?byId(id):null,d=old?.data||{};
+  modal(old?t('Edit document','Modifier le document'):t('New department document','Nouveau document'),
+   `<form id="dept-doc-form" data-id="${old?.id||''}" data-version="${old?.version||''}">
+    <div class="form-grid">
+     <label>${t('Title','Titre')}<input name="title" value="${esc(d.title||'')}" required maxlength="200"></label>
+     <label>${t('Filed as','Classé comme')}<select name="category" required>${options(documentCategories.map(c=>[c,t(categoryLabels[c].replace(/s$/,''),categoryLabels[c])]),d.category||'report')}</select></label>
+     <label>${t('Date','Date')}<input type="date" name="date" value="${esc(d.date||todayISO())}" required></label>
+     <label>${t('Reference','Référence')}<input name="reference" value="${esc(d.reference||'')}" placeholder="GHS/CS/2026/01"></label>
+    </div>
+    <label class="wide">${t('Body','Contenu')}<textarea name="body" rows="14" required>${esc(d.body||'')}</textarea></label>
+    <div class="actions"><button class="primary">${t('Save','Enregistrer')}</button>${button(t('Cancel','Annuler'),'close','secondary')}</div>
+    <p class="error" id="form-error" role="alert"></p></form>`);
+ }
+ if(action==='dept-doc-open'){
+  const r=byId(id),d=r.data,mine=d.department===profile.department;
+  const signer=d.signedBy?byId(d.signedBy)?.data:null;
+  modal(d.title,`<p class="muted small">${esc(categoryLabels[d.category]||d.category)} · ${esc(d.date||'')} · ${esc(name(d.authorId))}${d.reference?' · '+esc(d.reference):''}</p>
+   <div class="prose">${esc(d.body)}</div>
+   ${d.status==='signed'?`<div class="sign-block"><p class="muted small">${t('Signed by','Signé par')} ${esc(name(d.signedBy))}${d.signedAt?', '+esc(String(d.signedAt).slice(0,10)):''}</p>${signer?.signature?`<img class="sign-img" src="${safeImage(signer.signature)}" alt="${esc(t('Signature','Signature'))}">`:`<p class="muted small">${t('No signature image on file for that head of department.','Aucune image de signature enregistrée.')}</p>`}</div>`:''}
+   <div class="actions">${button(t('Print','Imprimer'),'dept-doc-print','secondary',`data-id="${r.id}"`)}
+   ${mine&&d.status!=='signed'?button(t('Edit','Modifier'),'dept-doc-edit','secondary',`data-id="${r.id}"`):''}</div>`);
+ }
+ if(action==='dept-doc-print'){
+  const d=byId(id).data,signer=d.signedBy?byId(d.signedBy)?.data:null;
+  printView(`<article class="print-page"><div class="letterhead"><div>REPUBLIC OF CAMEROON<br>Peace – Work – Fatherland<br>MINISTRY OF SECONDARY EDUCATION</div><img src="/crest.jpg" alt=""><div>RÉPUBLIQUE DU CAMEROUN<br>Paix – Travail – Patrie<br>GHS MBONJO LIMBE</div></div>
+   <p class="center"><b>${esc(String(d.department||'').toUpperCase())} DEPARTMENT</b></p>
+   <h2 class="document-title">${esc(d.title)}</h2>
+   <p>${esc(categoryLabels[d.category]||d.category)}${d.reference?' · '+esc(d.reference):''} · ${esc(d.date||'')}</p>
+   <div class="document-body">${esc(d.body)}</div>
+   <div class="signature"><p>${t('Head of Department','Chef de Département')}</p>${signer?.signature?`<img class="sign-img" src="${safeImage(signer.signature)}" alt="">`:'<div class="signature-space"></div>'}<p>${esc(d.signedBy?name(d.signedBy):'')}</p></div></article>`);
+ }
+ if(action==='dept-doc-sign'){
+  const r=byId(id);
+  if(!profile.signature){modal(t('Add your signature first','Ajoutez d’abord votre signature'),`<p>${t('Open My profile and upload a signature image. It is then placed on every document you sign.','Ouvrez Mon profil et téléversez une image de signature. Elle sera apposée sur chaque document que vous signez.')}</p>`);return;}
+  await api('save',{kind:'dept_document',id:r.id,version:r.version,data:{...r.data,status:'signed',signedBy:profile.id,signedAt:new Date().toISOString()}});
+  await refresh();toast(t('Document signed.','Document signé.'));
+ }
+ if(action==='dept-doc-transmit'){
+  const r=byId(id);
+  modal(t('Transmit to the principal','Transmettre au proviseur'),
+   `<p>${t('The principal and vice principal will be able to read this document. Transmitting cannot be undone from here.','Le proviseur et le censeur pourront lire ce document. La transmission est définitive depuis cet écran.')}</p>
+    <p><b>${esc(r.data.title)}</b></p>
+    <div class="actions">${button(t('Transmit','Transmettre'),'dept-doc-transmit-confirm','primary',`data-id="${r.id}"`)}${button(t('Cancel','Annuler'),'close','secondary')}</div>`);
+ }
+ if(action==='dept-doc-transmit-confirm'){
+  const r=byId(id);
+  await api('save',{kind:'dept_document',id:r.id,version:r.version,data:{...r.data,transmitted:true,transmittedAt:new Date().toISOString()}});
+  $('#modal').close();await refresh();toast(t('Transmitted to the principal.','Transmis au proviseur.'));
+ }
+ // --- equipment ---
+ if(action==='dept-item-new'){
+  modal(t('Add equipment','Ajouter un équipement'),
+   `<form id="dept-item-form"><div class="form-grid">
+    <label>${t('Item','Article')}<input name="name" required maxlength="120" placeholder="Desktop computer"></label>
+    <label>${t('Category','Catégorie')}<select name="category" required>${options(itemCategories)}</select></label>
+    <label>${t('Quantity','Quantité')}<input type="number" name="quantity" value="1" min="1" max="9999" step="1" required></label>
+    <label>${t('Condition','État')}<select name="condition">${options(itemConditions)}</select></label>
+    <label>${t('Location','Emplacement')}<input name="location" placeholder="Computer laboratory"></label>
+    <label>${t('Serial or tag','N° de série')}<input name="serial"></label>
+   </div><label class="wide">${t('Note','Note')}<textarea name="note" rows="2"></textarea></label>
+   <div class="actions"><button class="primary">${t('Save','Enregistrer')}</button>${button(t('Cancel','Annuler'),'close','secondary')}</div>
+   <p class="error" id="form-error" role="alert"></p></form>`);
+ }
+ // --- progression ---
+ if(action==='prog-add'){
+  if(!progSheets.length){const r=await api('progression-catalogue');progSheets=r.sheets;}
+  modal(t('Track a progression sheet','Suivre une fiche de progression'),
+   `<form id="prog-add-form"><p>${t('These are the national and departmental sheets supplied with the app. If yours is not here, use Import a sheet instead.','Voici les fiches nationales et départementales fournies. Sinon, utilisez « Importer une fiche ».')}</p>
+    <label>${t('Sheet','Fiche')}<select name="sheet" required>${options(progSheets.map((x,i)=>[String(i),`${x.subject} · ${x.class} · ${x.lessons} ${t('lessons','leçons')}`]))}</select></label>
+    <label>${t('Academic year','Année scolaire')}<input name="year" value="${esc(academicYear())}" required></label>
+    <label>${t('Current school week','Semaine en cours')}<input type="number" name="currentWeek" min="1" max="40" step="1" value="1"><small>${t('Used to work out whether the subject is behind.','Sert à déterminer si la matière est en retard.')}</small></label>
+    <div class="actions"><button class="primary">${t('Start tracking','Commencer le suivi')}</button>${button(t('Cancel','Annuler'),'close','secondary')}</div>
+    <p class="error" id="form-error" role="alert"></p></form>`);
+ }
+ if(action==='prog-import'){
+  modal(t('Import a progression sheet','Importer une fiche de progression'),
+   `<form id="prog-import-form"><p>${t('Upload an Excel or CSV version of your sheet. It needs a heading row with at least a Lesson title column; Term, Week, Module, Category of action, Lesson no and Objectives are used if present.','Téléversez votre fiche au format Excel ou CSV. Une ligne d’en-tête avec au moins « Lesson title » est requise ; Term, Week, Module, Category of action, Lesson no et Objectives sont repris s’ils existent.')}</p>
+    <div class="form-grid">
+     <label>${t('Subject','Matière')}<input name="subject" required value="${esc(profile.department||'')}"></label>
+     <label>${t('Class','Classe')}<select name="class" required>${options(classes)}</select></label>
+     <label>${t('Academic year','Année scolaire')}<input name="year" value="${esc(academicYear())}" required></label>
+     <label>${t('Current school week','Semaine en cours')}<input type="number" name="currentWeek" min="1" max="40" step="1" value="1"></label>
+    </div>
+    <label class="wide">${t('File','Fichier')}<input type="file" name="file" accept=".csv,.xlsx" required></label>
+    <div class="actions"><button class="primary">${t('Import','Importer')}</button>${button(t('Cancel','Annuler'),'close','secondary')}</div>
+    <p class="error" id="form-error" role="alert"></p></form><div id="prog-import-preview"></div>`);
+ }
+ if(action==='prog-open'){
+  const r=byId(id),d=r.data,c=coverage(d.lessons||[],d.taught||{},{currentWeek:d.currentWeek||null});
+  const byWeek=new Map();
+  for(const row of c.rows){const w=row.week||'—';if(!byWeek.has(w))byWeek.set(w,[]);byWeek.get(w).push(row);}
+  modal(`${d.subject} · ${d.class}`,
+   `<form id="prog-mark-form" data-id="${r.id}" data-version="${r.version}">
+    <label>${t('Current school week','Semaine en cours')}<input type="number" name="currentWeek" min="1" max="40" step="1" value="${esc(d.currentWeek||'')}"></label>
+    <p class="muted small">${t('Tick a lesson once it has been taught. The date is recorded with it.','Cochez une leçon une fois traitée. La date est enregistrée.')}</p>
+    <div class="prog-list">${[...byWeek].map(([w,rowsIn])=>`<fieldset><legend>${t('Week','Semaine')} ${esc(w)} · ${esc(termOfWeek(w)||'')}</legend>
+      ${rowsIn.map(row=>`<label class="prog-row"><input type="checkbox" name="lesson" value="${esc(row.key)}" ${row.taught?'checked':''}>
+       <span>${row.number?`<b>${esc(row.number)}.</b> `:''}${esc(row.title)}${row.record?.date?` <small class="muted">${esc(row.record.date)}</small>`:''}</span></label>`).join('')}
+     </fieldset>`).join('')}</div>
+    <div class="actions"><button class="primary">${t('Save','Enregistrer')}</button>${button(t('Cancel','Annuler'),'close','secondary')}</div>
+    <p class="error" id="form-error" role="alert"></p></form>`);
+ }
+ if(action==='prog-advice'){
+  const r=byId(id),d=r.data;
+  const c=coverage(d.lessons||[],d.taught||{},{currentWeek:d.currentWeek||null});
+  modal(t('Asking the AI…','Demande à l’IA…'),`<p class="chart-empty">${t('Reading the coverage figures…','Lecture des chiffres de couverture…')}</p>`);
+  try{
+   const a=await api('ai',{prompt:coveragePrompt(c,{subject:d.subject,cls:d.class,year:d.year}),language:lang,style:''});
+   await api('save',{kind:'progression',id:r.id,version:r.version,data:{...d,advice:a.text,adviceAt:new Date().toISOString()}});
+   await refresh();$('#modal').close();toast(t('The AI note has been saved with the scheme.','La note de l’IA a été enregistrée.'));
+  }catch(err){modal(t('The AI could not answer','L’IA n’a pas pu répondre'),`<p class="error">${esc(err.message)}</p>`);}
+ }
+ // --- messages ---
+ if(action==='msg-open'){msgThread=id;render();}
+ if(action==='msg-new'){
+  modal(t('Write to a colleague','Écrire à un collègue'),
+   `<form id="msg-direct-form"><label>${t('Colleague','Collègue')}<select name="toId" required>${options(msgColleagues.map(c=>[c.id,c.department?`${c.name} · ${c.department}`:c.name]))}</select></label>
+    <label>${t('Message','Message')}<textarea name="body" rows="4" required maxlength="4000"></textarea></label>
+    <div class="actions"><button class="primary">${t('Send','Envoyer')}</button>${button(t('Cancel','Annuler'),'close','secondary')}</div>
+    <p class="error" id="form-error" role="alert"></p></form>`);
+ }
+ // --- save an AI draft into the department library ---
+ if(action==='ai-save-department'){
+  const body=$('#ai-result')?.value?.trim();
+  if(!body){toast(t('Generate a draft first.','Générez d’abord un brouillon.'));return;}
+  if(!profile.department){toast(t('Your profile has no department.','Aucun département associé à votre profil.'));return;}
+  modal(t('Save to department documents','Enregistrer dans les documents du département'),
+   `<form id="dept-doc-form" data-id="" data-version="">
+    <div class="form-grid">
+     <label>${t('Title','Titre')}<input name="title" value="${esc($('#writing-title')?.value||'')}" required maxlength="200"></label>
+     <label>${t('Filed as','Classé comme')}<select name="category" required>${options(documentCategories.map(c=>[c,categoryLabels[c].replace(/s$/,'')]),'report')}</select></label>
+     <label>${t('Date','Date')}<input type="date" name="date" value="${todayISO()}" required></label>
+     <label>${t('Reference','Référence')}<input name="reference"></label>
+    </div>
+    <label class="wide">${t('Body','Contenu')}<textarea name="body" rows="12" required>${esc(body)}</textarea></label>
+    <p class="muted small">${t('Written with AI assistance. Read it before you sign it.','Rédigé avec l’aide de l’IA. Relisez avant de signer.')}</p>
+    <div class="actions"><button class="primary">${t('Save','Enregistrer')}</button>${button(t('Cancel','Annuler'),'close','secondary')}</div>
+    <p class="error" id="form-error" role="alert"></p></form>`);
+ }
  if(action==='print-class')printView(classSheet(id,allTimetableEntries(),availableSubjects(rows)));
  if(action==='print-teacher')printView(teacherSheet(id,allTimetableEntries(),availableSubjects(rows)));
  if(action==='print-all-classes'){const e=allTimetableEntries(),s=availableSubjects(rows);printView(timetableClasses(e).map(c=>classSheet(c,e,s)).join(''));}
@@ -429,11 +724,12 @@ document.addEventListener('click',async e=>{const el=e.target.closest('[data-act
  if(action==='issue-batch'){el.disabled=true;const issued=[];try{for(const d of bulkDraft){const a=await api('save',{kind:'document',data:d});issued.push(a.row);}await refresh();printView((await Promise.all(issued.map(x=>documentHTML(x.data)))).join(''),issued.map(x=>x.data));}catch(err){await refresh();throw Error(`${issued.length} documents issued before stopping. View the register before retrying. ${err.message}`);}}
  }catch(err){toast(err.message);}});
 let bulkDraft=[];
-document.addEventListener('change',async e=>{if(e.target.id==='tt-class'){ttClass=e.target.value;render();return;}
+document.addEventListener('change',async e=>{if(e.target.id==='dept-pick'){deptFilter=e.target.value;render();return;}
+ if(e.target.id==='tt-class'){ttClass=e.target.value;render();return;}
  if(e.target.id==='tt-teacher'){ttTeacher=e.target.value;render();return;}
  if(e.target.id==='login-mode'){const student=e.target.value==='student';$('#staff-fields').hidden=student;$('#student-fields').hidden=!student;$('#staff-fields').querySelectorAll('input').forEach(x=>x.required=!student);$('#student-fields').querySelectorAll('input').forEach(x=>x.required=student);}
  if(e.target.id==='contact-department'){const dept=e.target.value;$('#contact-person').innerHTML='<option value="">Choose colleague</option>'+options(contactsCache.filter(c=>c.department===dept).map(c=>[c.id,c.name+' · '+(c.phone||'No number')]));}
- if(e.target.id==='portal-jump'){tab=e.target.value;history.pushState({},'','/portal?tab='+tab);render();window.scrollTo(0,0);}
+ if(e.target.id==='portal-jump'){tab=e.target.value;if(tab==='messages'&&!msgLoaded)loadMessages().then(render);history.pushState({},'','/portal?tab='+tab);render();window.scrollTo(0,0);}
  if(e.target.id==='student-class'){studentClass=e.target.value;studentSelection='';render();}
  if(e.target.id==='student-query'){studentSelection=e.target.value;render();}
  if(e.target.id==='gallery-filter'){filter=e.target.value;render();}
@@ -461,6 +757,68 @@ document.addEventListener('submit',async e=>{e.preventDefault();const form=e.tar
  if(kind==='student'){d.matricule=normalizeMatricule(d.matricule);d.subjects=new FormData(form).getAll('subjects');}await api('save',{kind,id:old?.id,version:old?.version,data:d});$('#modal').close();await refresh();toast(t('Saved.','Enregistré.'));}
  if(form.id==='submission-form'){await api('save',{kind:'submission',data:{resourceId:form.dataset.id,body:data.body}});$('#modal').close();await refresh();toast('Your work has been submitted.');}
  if(form.id==='roll-form'){const a=byId($('#roll-assignment').value),date=$('#roll-date').value;let count=0;try{for(const [studentId,status] of Object.entries(data)){const old=list('attendance').find(r=>r.data.studentId===studentId&&r.data.assignmentId===a.id&&r.data.date===date);await api('save',{kind:'attendance',id:old?.id,version:old?.version,data:{studentId,status,date,class:a.data.class,assignmentId:a.id,subject:a.data.subject}});count++;}}catch(err){await refresh();throw Error(`${count} attendance records saved before stopping. ${err.message}`);}await refresh();toast(`${count} attendance records saved.`);}
+ if(form.id==='dept-doc-form'){
+  const old=form.dataset.id?byId(form.dataset.id):null;
+  await api('save',{kind:'dept_document',id:old?.id,version:old?.version,
+   data:{...(old?.data||{}),...data,department:profile.department,
+         authorId:old?.data.authorId||profile.id,
+         status:old?.data.status||'draft',transmitted:old?.data.transmitted===true}});
+  $('#modal').close();await refresh();toast(t('Document saved.','Document enregistré.'));
+  return;
+ }
+ if(form.id==='dept-item-form'){
+  await api('save',{kind:'dept_item',data:{...data,department:profile.department,quantity:Number(data.quantity)||1}});
+  $('#modal').close();await refresh();toast(t('Equipment added.','Équipement ajouté.'));
+  return;
+ }
+ if(form.id==='prog-add-form'){
+  const chosen=progSheets[Number(data.sheet)];
+  if(!chosen)throw Error(t('Choose a sheet.','Choisissez une fiche.'));
+  const key=chosen.subject+'|'+chosen.class;
+  if(!progSheetCache[key]){const r=await api('progression-sheet',{subject:chosen.subject,class:chosen.class});progSheetCache[key]=r.sheet;}
+  const sheet=progSheetCache[key];
+  await api('save',{kind:'progression',data:{department:profile.department,subject:chosen.subject,class:data.class||chosen.class,
+   year:data.year,currentWeek:Number(data.currentWeek)||null,sourceTitle:sheet.title,weeklyPeriods:sheet.weeklyPeriods,
+   lessons:sheet.lessons,taught:{}}});
+  $('#modal').close();await refresh();toast(t('Now tracking that scheme.','Suivi du programme activé.'));
+  return;
+ }
+ if(form.id==='prog-import-form'){
+  const file=form.elements.file.files[0];
+  const matrix=await readSheet(file);
+  const lessons=parseProgressionRows(matrix);
+  await api('save',{kind:'progression',data:{department:profile.department,subject:data.subject,class:data.class,
+   year:data.year,currentWeek:Number(data.currentWeek)||null,sourceTitle:file.name,lessons,taught:{}}});
+  $('#modal').close();await refresh();toast(`${lessons.length} ${t('lessons imported.','leçons importées.')}`);
+  return;
+ }
+ if(form.id==='prog-mark-form'){
+  const r=byId(form.dataset.id),d=r.data;
+  const ticked=new Set(new FormData(form).getAll('lesson'));
+  const taught={...(d.taught||{})};
+  (d.lessons||[]).forEach((lesson,i)=>{
+   const k=lessonKey(lesson,i);
+   if(ticked.has(k)){if(!taught[k])taught[k]={date:todayISO(),by:profile.id};}
+   else delete taught[k];
+  });
+  await api('save',{kind:'progression',id:r.id,version:r.version,data:{...d,taught,currentWeek:Number(data.currentWeek)||null}});
+  $('#modal').close();await refresh();toast(t('Coverage updated.','Couverture mise à jour.'));
+  return;
+ }
+ if(form.id==='msg-form'){
+  const thread=form.dataset.thread;
+  const payload=thread.startsWith('dept:')
+   ?{scope:'department',department:thread.slice(5)}
+   :{scope:'direct',toId:thread.slice(7)};
+  await api('save',{kind:'message',data:{...payload,fromId:profile.id,body:data.body,at:new Date().toISOString()}});
+  form.reset();await loadMessages();render();
+  return;
+ }
+ if(form.id==='msg-direct-form'){
+  await api('save',{kind:'message',data:{scope:'direct',toId:data.toId,fromId:profile.id,body:data.body,at:new Date().toISOString()}});
+  msgThread='direct:'+data.toId;$('#modal').close();await loadMessages();render();
+  return;
+ }
  if(form.id==='analytics-form'){
   anFrom=data.from;anTo=data.to;anClass=data.class||'';anYear=data.year||academicYear();
   anBusy=true;anError='';render();
