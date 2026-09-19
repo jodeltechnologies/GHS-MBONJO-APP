@@ -84,7 +84,7 @@ test('teachers come to school on fewer than five days on average',()=>{
  const avgGaps=stats.reduce((n,s)=>n+s.gaps,0)/stats.length;
  assert.ok(avgDays<4.3,`average ${avgDays.toFixed(2)} days per teacher`);
  assert.ok(stats.filter(s=>s.days===5).length<ids.length/3,'too many teachers in school all five days');
- assert.ok(avgGaps<2,`average ${avgGaps.toFixed(2)} free periods per teacher per week`);
+ assert.ok(avgGaps<1.5,`average ${avgGaps.toFixed(2)} free periods per teacher per week`);
 });
 
 test('the same assignments always produce the same timetable',()=>{
@@ -102,16 +102,30 @@ test('compacting never breaks a valid timetable',()=>{
  assert.deepEqual(conflicts(again,load),[]);
 });
 
+const wide={maxSubjectPerWeek:30};  // so these reach the check they are about
+
 test('an over-committed class is named instead of searching for the impossible',()=>{
  const load=[{class:'Form 1A',subject:'Mathematics',teacherId:'T1',department:'Mathematics',periods:30},
              {class:'Form 1A',subject:'English Language',teacherId:'T2',department:'English',periods:20}];
- assert.throws(()=>generateTimetable(load,FORM5_END,classes),/Form 1A is assigned 50 periods.*only has 38/s);
+ assert.throws(()=>generateTimetable(load,FORM5_END,classes,{preferences:{...wide,maxSubjectPerDay:4}}),/Form 1A is assigned 50 periods.*only has 38/s);
 });
 
-test('a teacher assigned more periods than the school week is named',()=>{
- const load=[{class:'Form 1A',subject:'Mathematics',teacherId:'T1',department:'Mathematics',periods:25},
-             {class:'Form 1B',subject:'Mathematics',teacherId:'T1',department:'Mathematics',periods:25}];
- assert.throws(()=>generateTimetable(load,FORM5_END,classes),/One teacher is assigned 50 periods/);
+test('a teacher assigned more periods than the preferences allow is named',()=>{
+ // One teacher across five classes, 40 periods, against a week that holds 38.
+ const load=['Form 1A','Form 1B','Form 2A','Form 2B','Form 3A'].map(c=>({class:c,subject:'Mathematics',teacherId:'T1',department:'Mathematics',periods:8}));
+ assert.throws(()=>generateTimetable(load,FORM5_END,classes,{preferences:{...wide,maxSubjectPerDay:4}}),/One teacher is assigned 40 periods a week, but the preferences leave room for only 38/);
+});
+
+test('a subject that cannot fit at its daily limit is named',()=>{
+ const load=[{class:'Form 1A',subject:'Mathematics',teacherId:'T1',department:'Mathematics',periods:12}];
+ assert.throws(()=>generateTimetable(load,FORM5_END,classes,{preferences:{...wide,maxSubjectPerDay:2}}),
+  /Form 1A cannot fit 12 periods of Mathematics into a week at no more than 2 a day/);
+});
+
+test('an assignment above the weekly subject limit is named',()=>{
+ const load=[{class:'Form 1A',subject:'Mathematics',teacherId:'T1',department:'Mathematics',periods:12}];
+ assert.throws(()=>generateTimetable(load,FORM5_END,classes,{preferences:{maxSubjectPerWeek:10}}),
+  /Form 1A is assigned 12 periods of Mathematics a week, above the limit of 10/);
 });
 
 test('a bad assignment row is rejected before anything is placed',()=>{
@@ -160,4 +174,170 @@ test('the printed columns are the school bell schedule',()=>{
  assert.equal(timetablePeriods[9].end,960);     // 16:00
  assert.equal(capacity('Form 1A'),38);
  assert.equal(capacity('Lower Sixth Science'),42);
+});
+
+// ---------------------------------------------------------------------------
+// Generation preferences
+// ---------------------------------------------------------------------------
+import {defaultPreferences,normalizePreferences} from '../src/domain.js';
+
+const periodsOn=(e,teacherId,day)=>e.filter(x=>x.teacherId===teacherId&&x.day===day).length;
+const daysOf=(e,teacherId)=>new Set(e.filter(x=>x.teacherId===teacherId).map(x=>x.day)).size;
+
+test('preferences are clamped, and unknown subjects and staff are dropped',()=>{
+ const p=normalizePreferences({
+  form5End:'nonsense',lastPeriod:99,maxSubjectPerDay:0,maxSubjectPerWeek:-4,maxTeacherPerDay:500,maxTeacherDays:9,
+  subjects:{'Mathematics':{pattern:'hourly',morning:'true',maxPerDay:77},'Astrology':{pattern:'single'}},
+  teachers:{T1:{off:['Monday','Monday','Caturday'],maxDays:0,maxPerDay:'x'},GHOST:{off:['Friday']}}},
+  {subjectNames:['Mathematics'],teacherIds:['T1']});
+ assert.equal(p.form5End,880);
+ assert.equal(p.lastPeriod,10);
+ assert.equal(p.maxSubjectPerDay,1);
+ assert.equal(p.maxSubjectPerWeek,1);
+ assert.equal(p.maxTeacherPerDay,10);
+ assert.equal(p.maxTeacherDays,5);
+ assert.equal(p.subjects.Mathematics.pattern,'auto');   // 'hourly' is not a pattern
+ assert.equal(p.subjects.Mathematics.morning,true);
+ assert.equal(p.subjects.Mathematics.maxPerDay,4);
+ assert.equal(p.subjects.Astrology,undefined);          // not a subject in this school
+ assert.deepEqual(p.teachers.T1.off,['Monday']);        // deduplicated, Caturday dropped
+ assert.equal(p.teachers.T1.maxDays,1);
+ assert.equal(p.teachers.T1.maxPerDay,null);
+ assert.equal(p.teachers.GHOST,undefined);
+});
+
+test('defaults are the school week as it actually runs',()=>{
+ const d=defaultPreferences();
+ assert.equal(d.form5End,880);
+ assert.equal(d.maxSubjectPerDay,2);      // one double
+ assert.equal(d.maxTeacherPerDay,8);      // a Form 1-4 day is 8 periods
+ assert.equal(d.maxTeacherDays,5);
+});
+
+// A lighter register, for the rules that need room to show themselves.
+function lightLoad(list=classes.slice(0,10),perTeacher=3){
+ const plan=[['Mathematics',5],['English Language',5],['French',4],['Biology',4],['Chemistry',4],['Physics',4],['History',3],['Geography',3],['Computer Science',3]];
+ const out=[];
+ for(const c of list)for(const [subject,periods] of plan)
+  out.push({class:c,subject,teacherId:`${subject.slice(0,4).toUpperCase()}-${list.indexOf(c)%perTeacher}`,department:subject,periods});
+ return out;
+}
+
+test('lessons stop after the latest period the school chose',()=>{
+ const load=lightLoad(classes.slice(0,6)).filter(a=>a.subject!=='Computer Science'&&a.subject!=='Geography');
+ const entries=generateTimetable(load,FORM5_END,classes,{preferences:{lastPeriod:6}});
+ assert.deepEqual(conflicts(entries,load),[]);
+ const latest=Math.max(...entries.map(e=>e.end));
+ assert.equal(latest,timetablePeriods[5].end,`lessons ran to ${latest}, past the end of period 6`);
+});
+
+test('period 9 and 10 belong to Form 5 at 16:00 and Sixth Form only',()=>{
+ assert.equal(slotsFor('Form 3A','Monday',880).at(-1).end,880);        // 14:40
+ assert.equal(slotsFor('Form 5A','Monday',880).at(-1).end,880);
+ assert.equal(slotsFor('Form 5A','Monday',960).at(-1).end,930);
+ assert.equal(slotsFor('Lower Sixth Arts','Monday',880).at(-1).end,930);
+ assert.equal(slotsFor('Form 3A','Monday',880,4).at(-1).end,650);      // capped at period 4
+});
+
+test('a day a teacher cannot come is left completely empty for them',()=>{
+ const load=schoolLoad(classes.slice(0,8));
+ const victims=[...new Set(load.map(a=>a.teacherId))].slice(0,3);
+ const teachers={};
+ victims.forEach((id,i)=>{teachers[id]={off:i===0?['Monday','Friday']:['Wednesday']};});
+ const entries=generateTimetable(load,FORM5_END,classes,{preferences:{teachers}});
+ assert.deepEqual(conflicts(entries,load),[]);
+ assert.equal(periodsOn(entries,victims[0],'Monday'),0);
+ assert.equal(periodsOn(entries,victims[0],'Friday'),0);
+ assert.equal(periodsOn(entries,victims[1],'Wednesday'),0);
+ assert.equal(periodsOn(entries,victims[2],'Wednesday'),0);
+});
+
+test('a teacher capped at three days comes in on three days',()=>{
+ const load=schoolLoad(classes.slice(0,8));
+ const ids=[...new Set(load.map(a=>a.teacherId))];
+ const light=ids.filter(id=>load.filter(a=>a.teacherId===id).reduce((n,a)=>n+a.periods,0)<=18).slice(0,4);
+ assert.ok(light.length,'the test load should contain some lighter teachers');
+ const teachers=Object.fromEntries(light.map(id=>[id,{maxDays:3}]));
+ const entries=generateTimetable(load,FORM5_END,classes,{preferences:{teachers}});
+ assert.deepEqual(conflicts(entries,load),[]);
+ for(const id of light)assert.ok(daysOf(entries,id)<=3,`${id} still comes in ${daysOf(entries,id)} days`);
+});
+
+test('no teacher exceeds the daily period limit',()=>{
+ const load=schoolLoad(classes.slice(0,8));
+ const entries=generateTimetable(load,FORM5_END,classes,{preferences:{maxTeacherPerDay:5}});
+ assert.deepEqual(conflicts(entries,load),[]);
+ for(const id of new Set(entries.map(e=>e.teacherId)))
+  for(const day of timetableDays)
+   assert.ok(periodsOn(entries,id,day)<=5,`${id} teaches ${periodsOn(entries,id,day)} periods on ${day}`);
+});
+
+test('no class exceeds the daily limit for one subject',()=>{
+ // A cap of 1 also has to switch the subject to single periods: a double could
+ // never satisfy it, so the two settings are resolved together.
+ const load=lightLoad(classes.slice(0,8));
+ const entries=generateTimetable(load,FORM5_END,classes,{preferences:{maxSubjectPerDay:1}});
+ assert.deepEqual(conflicts(entries,load),[]);
+ for(const cls of new Set(entries.map(e=>e.class)))
+  for(const day of timetableDays){
+   const count=new Map();
+   for(const e of entries.filter(x=>x.class===cls&&x.day===day))count.set(e.subject,(count.get(e.subject)||0)+1);
+   for(const [subject,n] of count)assert.ok(n<=1,`${cls} has ${n} periods of ${subject} on ${day}`);
+  }
+});
+
+test('a subject set to singles is never given a double period',()=>{
+ const load=lightLoad(classes.slice(0,6));
+ const entries=generateTimetable(load,FORM5_END,classes,{preferences:{subjects:{'Physical Education':{pattern:'single'},'Mathematics':{pattern:'single'}}}});
+ assert.deepEqual(conflicts(entries,load),[]);
+ for(const cls of new Set(entries.map(e=>e.class)))for(const day of timetableDays){
+  const maths=entries.filter(e=>e.class===cls&&e.day===day&&e.subject==='Mathematics').sort((a,b)=>a.start-b.start);
+  for(let i=1;i<maths.length;i++)assert.notEqual(maths[i].start,maths[i-1].end,`${cls} got a double of Mathematics on ${day}`);
+ }
+});
+
+test('a subject marked for the morning is pulled before the break',()=>{
+ // A preference, not a rule: it needs a week with some room to act in. On a week
+ // where the subject's teachers already need every morning slot, it can only yield.
+ const load=lightLoad();
+ const early=(e,sub)=>e.filter(x=>x.subject===sub&&x.start<650).length/e.filter(x=>x.subject===sub).length;
+ const plain=generateTimetable(load,FORM5_END,classes);
+ const tuned=generateTimetable(load,FORM5_END,classes,{preferences:{subjects:{'Physics':{morning:true}}}});
+ assert.deepEqual(conflicts(tuned,load),[]);
+ assert.ok(early(tuned,'Physics')>early(plain,'Physics')+0.05,
+  `morning share only went from ${(100*early(plain,'Physics')).toFixed(0)}% to ${(100*early(tuned,'Physics')).toFixed(0)}%`);
+});
+
+test('a morning preference never costs a teacher an extra day',()=>{
+ const load=lightLoad();
+ const plain=generateTimetable(load,FORM5_END,classes);
+ const tuned=generateTimetable(load,FORM5_END,classes,{preferences:{subjects:{'Physics':{morning:true}}}});
+ const days=e=>{const ids=[...new Set(e.map(x=>x.teacherId))];return ids.reduce((n,id)=>n+teacherWeekCost(e,id).days,0)/ids.length;};
+ assert.ok(days(tuned)<=days(plain)+0.35,`average days rose from ${days(plain).toFixed(2)} to ${days(tuned).toFixed(2)}`);
+});
+
+test('preferences that cannot be met are refused, naming the cause',()=>{
+ const load=schoolLoad(classes.slice(0,4));
+ const heaviest=[...new Set(load.map(a=>a.teacherId))]
+  .map(id=>[id,load.filter(a=>a.teacherId===id).reduce((n,a)=>n+a.periods,0)])
+  .sort((a,b)=>b[1]-a[1])[0][0];
+ assert.throws(()=>generateTimetable(load,FORM5_END,classes,{preferences:{teachers:{[heaviest]:{maxDays:1}}}}),
+  /leave room for only|unavailable on every day/);
+ assert.throws(()=>generateTimetable(load,FORM5_END,classes,{preferences:{lastPeriod:3}}),
+  /only has|no room for/);
+});
+
+test('a teacher with no free day left is refused clearly',()=>{
+ const load=[{class:'Form 1A',subject:'Mathematics',teacherId:'T1',department:'Mathematics',periods:4}];
+ assert.throws(()=>generateTimetable(load,FORM5_END,classes,{preferences:{teachers:{T1:{off:timetableDays}}}}),
+  /unavailable on every day/);
+});
+
+test('preferences do not cost the grouping they were added to protect',()=>{
+ const load=schoolLoad();
+ const entries=generateTimetable(load,FORM5_END,classes,{preferences:defaultPreferences()});
+ const ids=[...new Set(entries.map(e=>e.teacherId))];
+ const avgDays=ids.reduce((n,id)=>n+teacherWeekCost(entries,id).days,0)/ids.length;
+ assert.deepEqual(conflicts(entries,load),[]);
+ assert.ok(avgDays<4.3,`average ${avgDays.toFixed(2)} days per teacher with default preferences`);
 });

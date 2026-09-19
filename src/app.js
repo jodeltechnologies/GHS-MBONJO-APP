@@ -7,7 +7,7 @@ import {postCatalogue,postOptions,whatsappLink} from './posts.js';
 import {exportModel,loadExportAssets,makeDocx,makePdf,downloadBlob} from './exports.js';
 import {encryptBackup} from './backup.js';
 import QRCode from 'qrcode';
-import {classes as baseClasses,departments,roles,normalizeMatricule,promotionEligible,time,clockTime,attestationText,reportSummary,studies,timetablePeriods,timetableBreak,timetableDays,timetableRow,timetableFor,subjectCode} from './domain.js';
+import {classes as baseClasses,departments,roles,normalizeMatricule,promotionEligible,time,clockTime,attestationText,reportSummary,studies,timetablePeriods,timetableBreak,timetableDays,timetableRow,timetableFor,subjectCode,defaultPreferences,normalizePreferences} from './domain.js';
 import archive from './archive.json';
 const $=s=>document.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let classes=[...baseClasses];
@@ -79,7 +79,7 @@ function portalContent(){
  if(tab==='documents')return `${r==='principal'?toolbar('document',button('Other official documents','official-letter','secondary')+button(t('Bulk issue','Émission en lot'),'bulk-docs','secondary')):''}${list('document').map(x=>`<article class="panel row"><div><h3>${esc(x.data.title||x.data.name)}</h3><p>${esc(x.data.reference)} · ${esc(x.data.kind)} ${badge(x.data.status)}</p></div><div class="actions">${button(t('Print','Imprimer'),'print-document','secondary',`data-id="${x.id}"`)}${r==='principal'&&x.data.status==='issued'?button(t('Revoke','Révoquer'),'revoke','danger',`data-id="${x.id}"`):''}</div></article>`).join('')||empty(t('No attestations issued yet.','Aucune attestation délivrée.'))}`;
  if(tab==='timetable'){
   const sheets=list('timetable'),entries=allTimetableEntries(),subjects=availableSubjects(rows);
-  const generator=isAdmin?`<form id="timetable-form" class="panel"><h2>${t('Generate a conflict-free timetable','Générer un emploi du temps sans conflit')}</h2><p>${t('50-minute periods · Break 10:50–11:20 · Wednesday ends 13:00. Sixth Form ends 16:00 with 30 minutes left after the final full period.','Périodes de 50 minutes · Pause 10h50–11h20 · Mercredi : fin à 13h00. Sixth Form : fin à 16h00, avec 30 minutes restantes après la dernière période complète.')}</p><p class="muted small">${t('Lessons are placed in doubles where the weekly count allows, and each teacher\u2019s periods are grouped so they attend on as few days as possible.','Les cours sont placés en blocs de deux lorsque le volume horaire le permet, et les périodes de chaque enseignant sont regroupées afin de réduire le nombre de jours de présence.')}</p><label>Form 5<select name="form5End" required><option value="">${t('Confirm closing time','Confirmer l\u2019heure de fin')}</option>${options([['880','14:40'],['960','16:00']])}</select></label><button class="primary">${t('Generate from teacher assignments','Générer à partir des affectations')}</button></form>`:'';
+  const generator=isAdmin?timetablePanel(subjects):'';
   if(!sheets.length)return generator+empty(t('No timetable has been published.','Aucun emploi du temps publié.'));
   const myId=profile.role==='student'?null:profile.id;
   const teacherList=timetableTeachers(entries),classList=timetableClasses(entries);
@@ -138,6 +138,78 @@ function teacherSheet(teacherId,entries,subjects){
  const {entries:mine,subjects:counts,total}=timetableFor(entries,{teacherId});
  const panel=`<table class="tt-counts"><thead><tr><th>Subjects</th><th>Count</th></tr></thead><tbody>${counts.map(c=>`<tr><td>${esc(c.subject.toUpperCase())}</td><td>${c.count}</td></tr>`).join('')}${counts.length?'':'<tr><td colspan="2" class="tt-none">No lessons assigned</td></tr>'}</tbody><tfoot><tr><th>Lessons/week</th><td>${total}</td></tr></tfoot></table>`;
  return `<article class="print-page tt-sheet tt-teacher"><header class="tt-head centred"><div><h1>Timetable: ${esc(name(teacherId))}</h1><p class="tt-sub">GOVERNMENT HIGH SCHOOL MBONJO LIMBE ${esc(printedYear())}</p></div></header><p class="tt-corner-label">GHS MBONJO LIMBE</p><div class="tt-body">${timetableGrid(mine,subjects,{mergeEmpty:true,showClass:true})}${panel}</div><footer class="tt-foot"><span>HOD\`S SIGNATURE-${esc(academicYear())}</span></footer></article>`;
+}
+// --- Generation preferences ---------------------------------------------------
+// One panel holding everything the school decides before generating: the school-wide
+// limits, a row per subject and a row per teacher. It opens with whatever was used
+// last time, which is stored inside the timetable record itself.
+function savedPreferences(){
+ const latest=list('timetable').map(x=>x.data).filter(d=>d&&d.preferences).pop();
+ return normalizePreferences(latest?.preferences||{form5End:latest?.form5End});
+}
+function teachingStaff(){
+ const ids=new Set(list('assignment').map(r=>r.data.teacherId));
+ return [...ids].map(id=>[id,name(id)]).filter(x=>x[1]).sort((a,b)=>a[1].localeCompare(b[1]));
+}
+function timetablePanel(subjects){
+ const p=savedPreferences();
+ const used=[...new Set(list('assignment').map(r=>r.data.subject))].sort();
+ const num=(key,label,val,min,max,hint='')=>`<label>${esc(label)}<input type="number" name="${key}" value="${esc(val)}" min="${min}" max="${max}" step="1" required>${hint?`<small>${esc(hint)}</small>`:''}</label>`;
+ const periodChoices=timetablePeriods.map(x=>[String(x.n),`${x.n} · ends ${clockTime(x.end)}`]);
+ const subjectRows=used.map(n=>{
+  const v=p.subjects[n]||{pattern:'auto',morning:false,maxPerDay:null};
+  return `<tr><td>${esc(n)}</td>
+   <td><select name="sub:${esc(n)}:pattern">${options([['auto',t('Automatic','Automatique')],['double',t('Doubles','Blocs de deux')],['single',t('Singles only','Périodes simples')]],v.pattern)}</select></td>
+   <td class="tt-tick"><input type="checkbox" name="sub:${esc(n)}:morning" ${v.morning?'checked':''} aria-label="${esc(n)} ${esc(t('prefer mornings','de préférence le matin'))}"></td>
+   <td><input type="number" name="sub:${esc(n)}:maxPerDay" value="${v.maxPerDay??''}" min="1" max="4" step="1" placeholder="${p.maxSubjectPerDay}"></td></tr>`;
+ }).join('');
+ const staffRows=teachingStaff().map(([id,nm])=>{
+  const v=p.teachers[id]||{off:[],maxDays:null,maxPerDay:null};
+  return `<tr><td>${esc(nm)}</td>
+   <td class="tt-days">${timetableDays.map(d=>`<label title="${esc(d)}"><input type="checkbox" name="stf:${esc(id)}:off" value="${d}" ${v.off.includes(d)?'checked':''}><span>${d.slice(0,2)}</span></label>`).join('')}</td>
+   <td><input type="number" name="stf:${esc(id)}:maxDays" value="${v.maxDays??''}" min="1" max="5" step="1" placeholder="${p.maxTeacherDays}"></td>
+   <td><input type="number" name="stf:${esc(id)}:maxPerDay" value="${v.maxPerDay??''}" min="1" max="10" step="1" placeholder="${p.maxTeacherPerDay}"></td></tr>`;
+ }).join('');
+ return `<form id="timetable-form" class="panel tt-prefs">
+  <h2>${t('Timetable preferences','Préférences de l’emploi du temps')}</h2>
+  <p class="muted">${t('Set these before generating. They are saved with the timetable and reopen here next time.','À définir avant la génération. Elles sont enregistrées avec l’emploi du temps et réapparaissent ici.')}</p>
+  <p class="notice">${t('50-minute periods · Break 10:50–11:20 · Wednesday ends 13:00 for everyone. Forms 1 to 4 close at 14:40, so periods 9 and 10 exist only for Form 5 on the 16:00 setting and for Sixth Form.','Périodes de 50 minutes · Pause 10h50–11h20 · Mercredi : fin à 13h00 pour tous. Les classes de 6e à 3e terminent à 14h40 ; les périodes 9 et 10 ne concernent donc que la Form 5 (option 16h00) et le Sixth Form.')}</p>
+  <div class="form-grid">
+   <label>${t('Form 5 closing time','Heure de fin, Form 5')}<select name="form5End" required>${options([['880','14:40'],['960','16:00']],String(p.form5End))}</select></label>
+   <label>${t('Latest period used','Dernière période utilisée')}<select name="lastPeriod">${options(periodChoices,String(p.lastPeriod))}</select><small>${t('Leave at 10 to use the full day where a class has one.','Laisser à 10 pour utiliser toute la journée lorsque la classe le permet.')}</small></label>
+   ${num('maxSubjectPerDay',t('Most periods of one subject a class may have in a day','Périodes maximales d’une matière par jour et par classe'),p.maxSubjectPerDay,1,4,t('2 allows one double period.','2 autorise un bloc de deux.'))}
+   ${num('maxSubjectPerWeek',t('Most periods of one subject a class may have in a week','Périodes maximales d’une matière par semaine et par classe'),p.maxSubjectPerWeek,1,30,t('A guard against a mistyped assignment.','Garde-fou contre une saisie erronée.'))}
+   ${num('maxTeacherPerDay',t('Most periods a teacher may teach in a day','Périodes maximales par jour et par enseignant'),p.maxTeacherPerDay,1,10,t('A Form 1 to 4 day is 8 periods. Lowering this spreads a teacher over more days.','Une journée de la 6e à la 3e compte 8 périodes. Réduire ce nombre étale l’enseignant sur davantage de jours.'))}
+   ${num('maxTeacherDays',t('Most days a teacher comes to school','Jours de présence maximaux par enseignant'),p.maxTeacherDays,1,5,t('Applies to every teacher unless their own row says otherwise.','S’applique à tous, sauf indication contraire dans leur ligne.'))}
+  </div>
+  <details class="tt-more"${used.length?'':' hidden'}><summary>${t('Per subject','Par matière')} · ${used.length}</summary>
+   <div class="table-scroll"><table><thead><tr><th>${t('Subject','Matière')}</th><th>${t('Blocks','Blocs')}</th><th>${t('Morning','Matin')}</th><th>${t('Max a day','Max/jour')}</th></tr></thead><tbody>${subjectRows}</tbody></table></div>
+   <p class="muted small">${t('Blocks: Automatic pairs periods where the weekly count allows. Singles only suits Physical Education or Manual Labour. Morning is a preference, not a rule — a full week will still place the subject later rather than fail.','Blocs : « Automatique » regroupe les périodes lorsque le volume le permet. « Périodes simples » convient à l’EPS ou au travail manuel. « Matin » est une préférence : une semaine chargée placera malgré tout la matière plus tard.')}</p>
+  </details>
+  <details class="tt-more"${staffRows?'':' hidden'}><summary>${t('Per teacher','Par enseignant')} · ${teachingStaff().length}</summary>
+   <div class="table-scroll"><table><thead><tr><th>${t('Teacher','Enseignant')}</th><th>${t('Days they cannot come','Jours d’indisponibilité')}</th><th>${t('Max days','Jours max')}</th><th>${t('Max a day','Max/jour')}</th></tr></thead><tbody>${staffRows}</tbody></table></div>
+   <p class="muted small">${t('Tick a day to keep that teacher free of lessons on it. Leave the two numbers empty to use the school-wide setting above.','Cochez un jour pour libérer totalement cet enseignant. Laissez les deux nombres vides pour appliquer le réglage général ci-dessus.')}</p>
+  </details>
+  <div class="actions"><button class="primary">${t('Generate from teacher assignments','Générer à partir des affectations')}</button>${button(t('Reset to defaults','Réinitialiser'),'tt-defaults','secondary')}</div>
+  <p class="muted small">${t('Lessons are placed in doubles where the weekly count allows, and each teacher’s periods are grouped so they attend on as few days as possible.','Les cours sont placés en blocs de deux lorsque le volume horaire le permet, et les périodes de chaque enseignant sont regroupées afin de réduire le nombre de jours de présence.')}</p>
+ </form>`;
+}
+// Reads the panel back into the shape the server expects.
+function readPreferences(form){
+ const f=new FormData(form),out=defaultPreferences(),subjects={},teachers={};
+ for(const k of ['form5End','lastPeriod','maxSubjectPerDay','maxSubjectPerWeek','maxTeacherPerDay','maxTeacherDays'])if(f.get(k)!==null)out[k]=Number(f.get(k));
+ for(const [key,value] of f.entries()){
+  const [tag,id,field]=key.split(':');
+  if(tag==='sub'){subjects[id]=subjects[id]||{pattern:'auto',morning:false,maxPerDay:null};
+   if(field==='pattern')subjects[id].pattern=value;
+   if(field==='morning')subjects[id].morning=true;
+   if(field==='maxPerDay')subjects[id].maxPerDay=value===''?null:Number(value);}
+  if(tag==='stf'){teachers[id]=teachers[id]||{off:[],maxDays:null,maxPerDay:null};
+   if(field==='off')teachers[id].off.push(value);
+   if(field==='maxDays')teachers[id].maxDays=value===''?null:Number(value);
+   if(field==='maxPerDay')teachers[id].maxPerDay=value===''?null:Number(value);}
+ }
+ return normalizePreferences({...out,subjects,teachers});
 }
 function allTimetableEntries(){return list('timetable').flatMap(x=>x.data.entries||[]);}
 function timetableClasses(entries){return [...new Set(entries.map(e=>e.class))].sort();}
@@ -217,6 +289,16 @@ document.addEventListener('click',async e=>{const el=e.target.closest('[data-act
  if(action==='all-present')$('#roll-list').querySelectorAll('select').forEach(x=>x.value='present');
  if(action==='print'){await document.fonts.ready;await Promise.all([...document.querySelectorAll('#print-content img')].map(img=>img.decode().catch(()=>{})));window.print();}
  if(action==='print-document')printView(await documentHTML(byId(id).data),[byId(id).data]);
+ if(action==='tt-defaults'){
+  // Put the panel back to the defaults without saving anything: nothing changes
+  // for the school until Generate is pressed.
+  const form=$('#timetable-form'),d=defaultPreferences();
+  for(const [k,v] of Object.entries(d))if(form.elements[k]&&typeof v!=='object')form.elements[k].value=v;
+  form.querySelectorAll('input[type=checkbox]').forEach(x=>x.checked=false);
+  form.querySelectorAll('select[name^="sub:"]').forEach(x=>x.value='auto');
+  form.querySelectorAll('input[type=number][name^="sub:"],input[type=number][name^="stf:"]').forEach(x=>x.value='');
+  toast(t('Preferences reset. Generate to apply them.','Préférences réinitialisées. Générez pour les appliquer.'));
+ }
  if(action==='print-class')printView(classSheet(id,allTimetableEntries(),availableSubjects(rows)));
  if(action==='print-teacher')printView(teacherSheet(id,allTimetableEntries(),availableSubjects(rows)));
  if(action==='print-all-classes'){const e=allTimetableEntries(),s=availableSubjects(rows);printView(timetableClasses(e).map(c=>classSheet(c,e,s)).join(''));}
@@ -265,7 +347,7 @@ document.addEventListener('submit',async e=>{e.preventDefault();const form=e.tar
  if(kind==='student'){d.matricule=normalizeMatricule(d.matricule);d.subjects=new FormData(form).getAll('subjects');}await api('save',{kind,id:old?.id,version:old?.version,data:d});$('#modal').close();await refresh();toast(t('Saved.','Enregistré.'));}
  if(form.id==='submission-form'){await api('save',{kind:'submission',data:{resourceId:form.dataset.id,body:data.body}});$('#modal').close();await refresh();toast('Your work has been submitted.');}
  if(form.id==='roll-form'){const a=byId($('#roll-assignment').value),date=$('#roll-date').value;let count=0;try{for(const [studentId,status] of Object.entries(data)){const old=list('attendance').find(r=>r.data.studentId===studentId&&r.data.assignmentId===a.id&&r.data.date===date);await api('save',{kind:'attendance',id:old?.id,version:old?.version,data:{studentId,status,date,class:a.data.class,assignmentId:a.id,subject:a.data.subject}});count++;}}catch(err){await refresh();throw Error(`${count} attendance records saved before stopping. ${err.message}`);}await refresh();toast(`${count} attendance records saved.`);}
- if(form.id==='timetable-form'){await api('timetable',data);await refresh();toast('Complete timetable generated without teacher or class conflicts.');}
+ if(form.id==='timetable-form'){const preferences=readPreferences(form);const r=await api('timetable',{preferences});await refresh();const n=(r.row?.data?.entries||[]).length;toast(t(`Timetable generated: ${n} periods placed, no teacher or class in two places at once.`,`Emploi du temps généré : ${n} périodes placées, sans conflit.`));}
  if(form.id==='provision-form'){await api('provision',data);$('#modal').close();await refresh();toast('Login created.');}
  if(form.id==='password-form'){await api('password',data);$('#modal').close();profile=null;rows=[];navigate('login');render();toast('Password changed. Please sign in.');}
  if(form.id==='feedback-form'){const old=byId(form.dataset.id);await api('save',{kind:'submission',id:old.id,version:old.version,data:{...old.data,...data}});$('#modal').close();await refresh();}

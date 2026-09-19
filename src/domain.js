@@ -20,10 +20,17 @@ export const normalizeBirthDate = v => {
 };
 export const promotionEligible = c => /^Form [1-4][A-Z]$/.test(c)||c.startsWith('Lower Sixth');
 export const studies=(student,subject)=>Array.isArray(student.requiredSubjects)?[...student.requiredSubjects,...(student.subjects||[])].includes(subject):!Array.isArray(student.subjects)||student.subjects.length===0||student.subjects.includes(subject);
-export function slotsFor(cls,day,form5End){
+// The teaching slots one class has on one day.
+// Forms 1 to 4 close at 14:40, so periods 9 and 10 exist only for Form 5 on the
+// 16:00 setting and for Sixth Form. Wednesday closes at 13:00 for everybody.
+// lastPeriod trims the day further still: set it to 8 and nothing is ever placed
+// after 14:40, whatever the class.
+export function slotsFor(cls,day,form5End,lastPeriod=10){
  const end=day==='Wednesday'?780:cls.startsWith('Form 5')?Number(form5End):cls.includes('Sixth')?960:880;
  if(!end)throw Error('Choose the Form 5 closing time before generating.');
- const out=[]; for(let start=450;start+50<=end;start+=50){if(start===650)start=680;if(start+50<=end)out.push({start,end:start+50});}return out;
+ const cap=timetablePeriods[Math.min(10,Math.max(1,+lastPeriod||10))-1].end;
+ const stop=Math.min(end,cap);
+ const out=[]; for(let start=450;start+50<=stop;start+=50){if(start===650)start=680;if(start+50<=stop)out.push({start,end:start+50});}return out;
 }
 export const time = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
 export const clockTime = m => {const h=Math.floor(m/60),x=h%12||12;return `${x}:${String(m%60).padStart(2,'0')} ${h<12?'AM':'PM'}`;};
@@ -128,18 +135,83 @@ export function subjectCode(name,subjects=[]){
 // Split a weekly period count into teaching blocks, largest first.
 // 4 -> [2,2]; 5 -> [2,2,1]; 3 -> [2,1]; 1 -> [1]. A subject taught once a week
 // keeps its single period rather than being inflated into a double.
-export function lessonBlocks(periods){
- const out=[];
- for(let left=+periods;left>0;left-=2)out.push(left>=2?2:1);
+// pattern: 'auto' pairs where it can, 'single' never pairs, 'double' pairs and
+// leaves one single only when the weekly count is odd (which is the same as auto,
+// but stated explicitly so the principal can see the intent on the sheet).
+export function lessonBlocks(periods,pattern='auto'){
+ const n=+periods,out=[];
+ if(pattern==='single'){for(let i=0;i<n;i++)out.push(1);return out;}
+ for(let left=n;left>0;left-=2)out.push(left>=2?2:1);
  return out;
 }
 
 const periodIndex=start=>timetablePeriods.findIndex(p=>p.start===start);
 
+// ---------------------------------------------------------------------------
+// Generation preferences
+// ---------------------------------------------------------------------------
+// What the school decides before generating. Some are hard rules the generator
+// must obey, some are preferences it works towards. Hard: the latest period of the
+// day, how many periods of one subject a class may have in a day and in a week,
+// how many periods a teacher may teach in a day, how many days a teacher comes in,
+// which days a teacher cannot be given at all, and whether a subject is taught in
+// singles or doubles. Soft: which subjects should fall in the morning.
+//
+// Whatever the browser sends is passed through normalizePreferences again on the
+// server, so a hand-edited request cannot smuggle a value past the limits.
+export const subjectPatterns=['auto','double','single'];
+export function defaultPreferences(){
+ // maxTeacherPerDay defaults to 8 because a Form 1 to 4 day is exactly 8 periods:
+ // a teacher who is in school all day can be teaching all of it. Lowering it is a
+ // real choice with a cost — it spreads a teacher over more days and leaves them
+ // more free periods between lessons, which is the opposite of what grouping is for.
+ return {form5End:880,lastPeriod:10,maxSubjectPerDay:2,maxSubjectPerWeek:10,maxTeacherPerDay:8,maxTeacherDays:5,subjects:{},teachers:{}};
+}
+const whole=(v,lo,hi,fallback)=>{const n=Math.round(Number(v));return Number.isFinite(n)?Math.min(hi,Math.max(lo,n)):fallback;};
+const wholeOrNull=(v,lo,hi)=>{if(v===''||v===null||v===undefined)return null;const n=Math.round(Number(v));return Number.isFinite(n)?Math.min(hi,Math.max(lo,n)):null;};
+
+export function normalizePreferences(raw={},{subjectNames=[],teacherIds=[]}={}){
+ const d=defaultPreferences(),p=raw&&typeof raw==='object'?raw:{};
+ const out={
+  form5End:[880,960].includes(Math.round(Number(p.form5End)))?Math.round(Number(p.form5End)):d.form5End,
+  lastPeriod:whole(p.lastPeriod,1,10,d.lastPeriod),
+  maxSubjectPerDay:whole(p.maxSubjectPerDay,1,4,d.maxSubjectPerDay),
+  maxSubjectPerWeek:whole(p.maxSubjectPerWeek,1,30,d.maxSubjectPerWeek),
+  maxTeacherPerDay:whole(p.maxTeacherPerDay,1,10,d.maxTeacherPerDay),
+  maxTeacherDays:whole(p.maxTeacherDays,1,5,d.maxTeacherDays),
+  subjects:{},teachers:{}};
+ const known=new Set(subjectNames);
+ for(const [name,v] of Object.entries(p.subjects||{})){
+  if(known.size&&!known.has(name))continue;
+  const s=v&&typeof v==='object'?v:{};
+  const entry={pattern:subjectPatterns.includes(s.pattern)?s.pattern:'auto',morning:s.morning===true||s.morning==='true',maxPerDay:wholeOrNull(s.maxPerDay,1,4)};
+  if(entry.pattern!=='auto'||entry.morning||entry.maxPerDay!==null)out.subjects[name]=entry;
+ }
+ const knownStaff=new Set(teacherIds);
+ for(const [id,v] of Object.entries(p.teachers||{})){
+  if(knownStaff.size&&!knownStaff.has(id))continue;
+  const s=v&&typeof v==='object'?v:{};
+  const off=[...new Set((Array.isArray(s.off)?s.off:[]).filter(x=>timetableDays.includes(x)))];
+  const entry={off,maxDays:wholeOrNull(s.maxDays,1,5),maxPerDay:wholeOrNull(s.maxPerDay,1,10)};
+  if(off.length||entry.maxDays!==null||entry.maxPerDay!==null)out.teachers[id]=entry;
+ }
+ return out;
+}
+// The daily cap and the block pattern are two ways of saying the same thing, so they
+// are resolved together. "Singles only" means one period of that subject a day —
+// otherwise two singles could land back to back and be a double in all but name.
+// A daily cap of 1 likewise forces singles, since a double could never satisfy it.
+function subjectPref(prefs,name){
+ const raw=prefs.subjects[name]||{pattern:'auto',morning:false,maxPerDay:null};
+ const cap=Math.min(raw.maxPerDay??prefs.maxSubjectPerDay,raw.pattern==='single'?1:4);
+ return {...raw,maxPerDay:cap,pattern:cap<2?'single':raw.pattern};
+}
+const teacherPref=(prefs,id)=>prefs.teachers[id]||{off:[],maxDays:null,maxPerDay:null};
+
 // Every way a block of `size` consecutive periods fits into one class's day.
 // Consecutive means the periods actually touch, so nothing crosses the break.
-function runsFor(cls,day,form5End,size){
- const slots=slotsFor(cls,day,form5End),out=[];
+function runsFor(cls,day,form5End,size,lastPeriod=10){
+ const slots=slotsFor(cls,day,form5End,lastPeriod),out=[];
  for(let i=0;i+size<=slots.length;i++){
   const run=slots.slice(i,i+size);
   let joined=true;
@@ -154,8 +226,8 @@ const CELLS=timetableDays.length*10;
 const at=(d,i)=>d*10+i;
 
 // What a placement would cost the teacher. Lower is better. The class is in school
-// all day whatever happens, so every term here is about the teacher's week.
-function cost(busy,classBusy,d,run,classDayLoad){
+// all day whatever happens, so most terms here are about the teacher's week.
+function cost(busy,classBusy,d,run,classDayLoad,morning){
  const first=run[0].i,last=run[run.length-1].i;
  let dayCount=0,onThisDay=0;
  for(let day=0;day<timetableDays.length;day++){
@@ -180,6 +252,9 @@ function cost(busy,classBusy,d,run,classDayLoad){
  // afternoons stay empty.
  c+=classDayLoad*0.6;
  c+=first*0.12;
+ // A subject marked for the morning pays to sit after the break. It is a
+ // preference, not a rule: a full week still places it rather than failing.
+ if(morning&&first>=breakColumnIndex)c+=60+(first-breakColumnIndex)*4;
  return c;
 }
 
@@ -196,68 +271,103 @@ function cost(busy,classBusy,d,run,classDayLoad){
 // so regenerating does not reshuffle the whole school for no reason.
 const mulberry32=a=>()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};
 
-export function generateTimetable(assignments,form5End,allowedClasses=classes,{deadlineMs=20000,seed=20262027}={}){
+export function generateTimetable(assignments,form5End,allowedClasses=classes,{deadlineMs=20000,seed=20262027,preferences,compact=true}={}){
+ const prefs=normalizePreferences({...(preferences||{}),form5End:preferences?.form5End??form5End},
+  {subjectNames:[...new Set(assignments.map(a=>a.subject))],teacherIds:[...new Set(assignments.map(a=>a.teacherId))]});
+ const close=prefs.form5End,last=prefs.lastPeriod;
  const jobs=[];
  for(const a of assignments){
   if(!allowedClasses.includes(a.class)||!a.teacherId||!a.subject||!Number.isInteger(+a.periods)||+a.periods<1||+a.periods>30)throw Error('Each assignment needs a class, teacher, subject and 1–30 periods.');
-  for(const size of lessonBlocks(a.periods))jobs.push({class:a.class,subject:a.subject,teacherId:a.teacherId,department:a.department,size});
+  if(+a.periods>prefs.maxSubjectPerWeek)throw Error(`${a.class} is assigned ${a.periods} periods of ${a.subject} a week, above the limit of ${prefs.maxSubjectPerWeek} set in the preferences. Raise the limit or reduce the assignment.`);
+  for(const size of lessonBlocks(a.periods,subjectPref(prefs,a.subject).pattern))jobs.push({class:a.class,subject:a.subject,teacherId:a.teacherId,department:a.department,size});
  }
  if(!jobs.length)return [];
 
- // Refuse the impossible before searching for it, and say which class or teacher is
- // over-committed, so the principal can fix the register instead of guessing.
- const capacity=cls=>timetableDays.reduce((n,day)=>n+slotsFor(cls,day,form5End).length,0);
+ // Refuse the impossible before searching for it, and name what caused it, so the
+ // principal can correct the register or the preferences instead of guessing.
+ const capacity=cls=>timetableDays.reduce((n,day)=>n+slotsFor(cls,day,close,last).length,0);
  for(const cls of new Set(jobs.map(j=>j.class))){
   const want=jobs.filter(j=>j.class===cls).reduce((n,j)=>n+j.size,0);
-  if(want>capacity(cls))throw Error(`${cls} is assigned ${want} periods a week but its week only has ${capacity(cls)}. Reduce that class's assignments before generating.`);
+  if(want>capacity(cls))throw Error(`${cls} is assigned ${want} periods a week but its week only has ${capacity(cls)}${last<10?` once lessons stop after period ${last}`:''}. Reduce that class's assignments, or allow later periods.`);
+ }
+ for(const a of assignments){
+  const cap=subjectPref(prefs,a.subject).maxPerDay;
+  const daysNeeded=Math.ceil(+a.periods/cap);
+  if(daysNeeded>timetableDays.length)throw Error(`${a.class} cannot fit ${a.periods} periods of ${a.subject} into a week at no more than ${cap} a day. Raise that subject's daily limit or reduce its periods.`);
  }
  for(const id of new Set(jobs.map(j=>j.teacherId))){
-  const want=jobs.filter(j=>j.teacherId===id).reduce((n,j)=>n+j.size,0);
-  const most=Math.max(...[...new Set(jobs.filter(j=>j.teacherId===id).map(j=>j.class))].map(capacity));
-  if(want>most)throw Error(`One teacher is assigned ${want} periods a week, more than the ${most} periods in the school week. Share that workload between teachers before generating.`);
+  const tp=teacherPref(prefs,id);
+  const mine=jobs.filter(j=>j.teacherId===id);
+  const want=mine.reduce((n,j)=>n+j.size,0);
+  const perDay=tp.maxPerDay??prefs.maxTeacherPerDay;
+  const theirClasses=[...new Set(mine.map(j=>j.class))];
+  const open=timetableDays.filter(d=>!tp.off.includes(d));
+  if(!open.length)throw Error('A teacher has been marked unavailable on every day but still has lessons assigned. Free up a day or move those classes to another teacher.');
+  const room=open.map(day=>Math.min(perDay,Math.max(...theirClasses.map(c=>slotsFor(c,day,close,last).length))));
+  const allowedDays=Math.min(tp.maxDays??prefs.maxTeacherDays,open.length);
+  const best=room.sort((a,b)=>b-a).slice(0,allowedDays).reduce((n,x)=>n+x,0);
+  if(want>best)throw Error(`One teacher is assigned ${want} periods a week, but the preferences leave room for only ${best} (${allowedDays} day${allowedDays===1?'':'s'} at up to ${perDay} periods). Share that workload, allow more days, or raise the daily limit.`);
  }
 
  // Every placement a block could take, as flat cell indices. Built once.
  const runCache=new Map();
  const runsOn=(cls,d,size)=>{
   const k=cls+'\u0001'+d+'\u0001'+size;
-  if(!runCache.has(k))runCache.set(k,runsFor(cls,timetableDays[d],form5End,size));
+  if(!runCache.has(k))runCache.set(k,runsFor(cls,timetableDays[d],close,size,last));
   return runCache.get(k);
  };
  for(const j of jobs){
   j.cands=[];
-  for(let d=0;d<timetableDays.length;d++)for(const run of runsOn(j.class,d,j.size))j.cands.push({d,run,cells:run.map(s=>at(d,s.i))});
-  if(!j.cands.length)throw Error(`${j.class} has no room for a ${j.size===2?'double':'single'} period of ${j.subject}. Check the class's closing time.`);
+  const off=teacherPref(prefs,j.teacherId).off;
+  for(let d=0;d<timetableDays.length;d++){
+   if(off.includes(timetableDays[d]))continue;   // the teacher is not in that day at all
+   for(const run of runsOn(j.class,d,j.size))j.cands.push({d,run,cells:run.map(s=>at(d,s.i))});
+  }
+  if(!j.cands.length)throw Error(`${j.class} has no room for a ${j.size===2?'double':'single'} period of ${j.subject} on any day its teacher is available. Check the closing time, the latest period, and that teacher's free days.`);
  }
 
- const classCnt=new Map(),teachCnt=new Map(),subjDay=new Map();
+ const classCnt=new Map(),teachCnt=new Map(),subjDay=new Map(),teachDay=new Map();
  const sKey=j=>j.class+'\u0001'+j.subject;
  for(const j of jobs){
   if(!classCnt.has(j.class))classCnt.set(j.class,new Int16Array(CELLS));
   if(!teachCnt.has(j.teacherId))teachCnt.set(j.teacherId,new Int16Array(CELLS));
+  if(!teachDay.has(j.teacherId))teachDay.set(j.teacherId,new Int16Array(timetableDays.length));
   if(!subjDay.has(sKey(j)))subjDay.set(sKey(j),new Int16Array(timetableDays.length));
  }
- const at_=(j,ci,delta)=>{
-  const c=j.cands[ci],cc=classCnt.get(j.class),tc=teachCnt.get(j.teacherId),sd=subjDay.get(sKey(j));
+ // Periods, not blocks, so the daily limits read the way the principal set them.
+ const apply=(j,ci,delta)=>{
+  const c=j.cands[ci],cc=classCnt.get(j.class),tc=teachCnt.get(j.teacherId),sd=subjDay.get(sKey(j)),td=teachDay.get(j.teacherId);
   for(const cell of c.cells){cc[cell]+=delta;tc[cell]+=delta;}
-  sd[c.d]+=delta;
+  sd[c.d]+=delta*c.cells.length;
+  td[c.d]+=delta*c.cells.length;
  };
- // How many clashes this placement would cause, counting the block as not placed.
- // A class or teacher double-booking is a hard clash; the same subject twice in one
- // class's day is weighted lower, because it is a quality rule rather than a physical
- // impossibility — but it is still driven to zero before the timetable is accepted.
+ // How many rules this placement would break, counting the block as not placed.
+ // Double bookings are physical impossibilities; the daily limits the school set are
+ // counted here too, so the repair solver drives them to zero before accepting a
+ // timetable rather than treating them as advice.
+ const limits=new Map();
+ for(const j of jobs)limits.set(j,{subject:subjectPref(prefs,j.subject).maxPerDay,
+                                   teacher:teacherPref(prefs,j.teacherId).maxPerDay??prefs.maxTeacherPerDay,
+                                   days:Math.min(teacherPref(prefs,j.teacherId).maxDays??prefs.maxTeacherDays,timetableDays.length-teacherPref(prefs,j.teacherId).off.length),
+                                   morning:subjectPref(prefs,j.subject).morning});
  const clashes=(j,ci)=>{
-  const c=j.cands[ci],cc=classCnt.get(j.class),tc=teachCnt.get(j.teacherId),sd=subjDay.get(sKey(j));
+  const c=j.cands[ci],size=c.cells.length,lim=limits.get(j);
+  const cc=classCnt.get(j.class),tc=teachCnt.get(j.teacherId),sd=subjDay.get(sKey(j)),td=teachDay.get(j.teacherId);
   let n=0;
   for(const cell of c.cells)n+=cc[cell]+tc[cell];
-  n+=sd[c.d]*2;
+  const overSubject=sd[c.d]+size-lim.subject;        if(overSubject>0)n+=overSubject*2;
+  const overTeacher=td[c.d]+size-lim.teacher;        if(overTeacher>0)n+=overTeacher*2;
+  if(!td[c.d]){
+   let used=0;for(let d=0;d<timetableDays.length;d++)if(td[d])used++;
+   if(used>=lim.days)n+=3;                           // a day beyond the teacher's allowance
+  }
   return n;
  };
  const assign=new Int32Array(jobs.length).fill(-1);
  const teacherCostOf=(j,ci)=>{
   const c=j.cands[ci],tb=teachCnt.get(j.teacherId),cb=classCnt.get(j.class);
   let load=0;for(let i=0;i<10;i++)if(cb[at(c.d,i)])load++;
-  return cost(tb,cb,c.d,c.run,load);
+  return cost(tb,cb,c.d,c.run,load,limits.get(j).morning);
  };
 
  const stop=Date.now()+deadlineMs;
@@ -283,9 +393,9 @@ export function generateTimetable(assignments,form5End,allowedClasses=classes,{d
   open.sort((a,b)=>teacherCostOf(j,a)-teacherCostOf(j,b)||a-b);
   done[pick]=true;left--;
   for(const ci of open){
-   at_(j,ci,1);assign[pick]=ci;
+   apply(j,ci,1);assign[pick]=ci;
    if(search())return true;
-   at_(j,ci,-1);assign[pick]=-1;
+   apply(j,ci,-1);assign[pick]=-1;
    if(Date.now()>fastStop)break;
   }
   done[pick]=false;left++;
@@ -293,10 +403,9 @@ export function generateTimetable(assignments,form5End,allowedClasses=classes,{d
  };
  let solved=search();
 
- // --- repair path: place everything, then move the clashing blocks -----------
+ // --- repair path: place everything, then move whatever breaks a rule --------
  if(!solved){
-  for(let n=0;n<jobs.length;n++)if(assign[n]>=0){at_(jobs[n],assign[n],-1);assign[n]=-1;}
-  // Seed greedily: hardest blocks first, each to its least-clashing spot.
+  for(let n=0;n<jobs.length;n++)if(assign[n]>=0){apply(jobs[n],assign[n],-1);assign[n]=-1;}
   const order=[...jobs.keys()].sort((a,b)=>jobs[a].cands.length-jobs[b].cands.length||a-b);
   for(const n of order){
    const j=jobs[n];let best=0,bestScore=Infinity;
@@ -304,22 +413,20 @@ export function generateTimetable(assignments,form5End,allowedClasses=classes,{d
     const s=clashes(j,ci)*1000+teacherCostOf(j,ci);
     if(s<bestScore){bestScore=s;best=ci;}
    }
-   at_(j,best,1);assign[n]=best;
+   apply(j,best,1);assign[n]=best;
   }
-  // Repair. Each step takes one clashing block and rehomes it. The random walk is
-  // what escapes the positions where every single move looks equally bad.
-  let sinceGain=0,bestTotal=Infinity;
+  let sinceGain=0,fewestBad=Infinity;
   while(Date.now()<stop){
    const bad=[];
    for(let n=0;n<jobs.length;n++){
-    at_(jobs[n],assign[n],-1);
+    apply(jobs[n],assign[n],-1);
     if(clashes(jobs[n],assign[n]))bad.push(n);
-    at_(jobs[n],assign[n],1);
+    apply(jobs[n],assign[n],1);
    }
    if(!bad.length){solved=true;break;}
-   if(bad.length<bestTotal){bestTotal=bad.length;sinceGain=0;}else sinceGain++;
+   if(bad.length<fewestBad){fewestBad=bad.length;sinceGain=0;}else sinceGain++;
    const n=bad[Math.floor(rand()*bad.length)],j=jobs[n];
-   at_(j,assign[n],-1);
+   apply(j,assign[n],-1);
    let choice;
    if(sinceGain>600&&rand()<0.25){
     choice=Math.floor(rand()*j.cands.length);       // shake loose
@@ -329,23 +436,21 @@ export function generateTimetable(assignments,form5End,allowedClasses=classes,{d
      const s=clashes(j,ci);
      if(s<bestScore){bestScore=s;pool=[ci];}else if(s===bestScore)pool.push(ci);
     }
-    // Among the equally-legal spots, take the one that suits the teacher best.
     pool.sort((a,b)=>teacherCostOf(j,a)-teacherCostOf(j,b)||a-b);
     choice=pool[rand()<0.1?Math.floor(rand()*pool.length):0];
    }
-   at_(j,choice,1);assign[n]=choice;
+   apply(j,choice,1);assign[n]=choice;
    if(sinceGain>600)sinceGain=0;
   }
  }
- if(!solved)throw Error('No conflict-free timetable was found in the time available. Reduce a class or teacher workload, or free up periods, and generate again; no partial timetable was saved.');
+ if(!solved)throw Error('No timetable was found that keeps every preference in the time available. Relax a limit — more days for a teacher, more periods a day, or a later closing period — and generate again; no partial timetable was saved.');
 
  const entries=[];
  jobs.forEach((j,n)=>{
   for(const s of j.cands[assign[n]].run)entries.push({class:j.class,subject:j.subject,teacherId:j.teacherId,department:j.department,day:timetableDays[j.cands[assign[n]].d],start:s.start,end:s.end});
  });
- return compactTeacherWeeks(entries,form5End);
+ return compact?compactTeacherWeeks(entries,close,{preferences:prefs}):entries;
 }
-
 // How scattered one teacher's week is: days in school, plus the free periods they
 // sit through between their first and last lesson each day. The break is not a gap.
 export function teacherWeekCost(entries,teacherId){
@@ -358,12 +463,38 @@ export function teacherWeekCost(entries,teacherId){
 }
 
 // A second pass over a finished timetable. It moves one whole block at a time to a
-// better place for its teacher, taking the move only when the result is still valid
-// and that teacher's week gets cheaper. Every intermediate state is a complete,
-// conflict-free timetable, so the worst case is simply that nothing improves.
-export function compactTeacherWeeks(entries,form5End,rounds=8){
+// better place for its teacher, taking the move only when the result still obeys
+// every rule the school set and that teacher's week gets cheaper. Every
+// intermediate state is a complete, valid timetable, so the worst case is simply
+// that nothing improves.
+export function compactTeacherWeeks(entries,form5End,options={}){
+ const {rounds=8,preferences}=typeof options==='number'?{rounds:options}:options;
+ const prefs=normalizePreferences(preferences||{form5End});
+ const last=prefs.lastPeriod;
  let current=entries.map(e=>({...e}));
  const key=e=>[e.class,e.subject,e.teacherId,e.day].join('\u0001');
+ // Would this arrangement break one of the school's limits for the block's teacher
+ // or class? Checked against the whole week, not just the day being changed.
+ const allowed=(rest,moved)=>{
+  const who=moved[0].teacherId,cls=moved[0].class,subject=moved[0].subject,day=moved[0].day;
+  const tp=prefs.teachers[who]||{off:[],maxDays:null,maxPerDay:null};
+  if(tp.off.includes(day))return false;
+  const all=[...rest,...moved];
+  const mine=all.filter(e=>e.teacherId===who);
+  const days=new Set(mine.map(e=>e.day));
+  if(days.size>Math.min(tp.maxDays??prefs.maxTeacherDays,timetableDays.length-tp.off.length))return false;
+  if(mine.filter(e=>e.day===day).length>(tp.maxPerDay??prefs.maxTeacherPerDay))return false;
+  const cap=subjectPref(prefs,subject).maxPerDay;
+  if(all.filter(e=>e.class===cls&&e.subject===subject&&e.day===day).length>cap)return false;
+  if(subjectPref(prefs,subject).pattern==='single'){
+   const same=all.filter(e=>e.class===cls&&e.subject===subject&&e.day===day).sort((a,b)=>a.start-b.start);
+   for(let i=1;i<same.length;i++)if(same[i].start===same[i-1].end)return false;
+  }
+  return true;
+ };
+ // Moving a block is judged on the teacher's week plus whether it keeps a
+ // morning subject in the morning, so compaction cannot quietly undo that choice.
+ const morningCost=list=>list.reduce((n,e)=>n+(subjectPref(prefs,e.subject).morning&&e.start>=timetableBreak.end?12:0),0);
  for(let round=0;round<rounds;round++){
   let improved=false;
   const blocks=new Map();
@@ -373,14 +504,14 @@ export function compactTeacherWeeks(entries,form5End,rounds=8){
    block.sort((a,b)=>a.start-b.start);
    const sample=block[0];
    const rest=current.filter(e=>!block.includes(e));
-   const before=teacherWeekCost(current,sample.teacherId).score;
+   const before=teacherWeekCost(current,sample.teacherId).score+morningCost(block);
    let best=null;
    for(const day of timetableDays){
-    if(day!==sample.day&&rest.some(r=>r.day===day&&r.class===sample.class&&r.subject===sample.subject))continue;
-    for(const run of runsFor(sample.class,day,form5End,block.length)){
+    for(const run of runsFor(sample.class,day,prefs.form5End||form5End,block.length,last)){
      if(rest.some(r=>r.day===day&&(r.class===sample.class||r.teacherId===sample.teacherId)&&run.some(s=>s.start<r.end&&r.start<s.end)))continue;
      const moved=run.map((s,i)=>({...block[i],day,start:s.start,end:s.end}));
-     const after=teacherWeekCost([...rest,...moved],sample.teacherId).score;
+     if(!allowed(rest,moved))continue;
+     const after=teacherWeekCost([...rest,...moved],sample.teacherId).score+morningCost(moved);
      if(after<before-1e-9&&(!best||after<best.score))best={score:after,moved};
     }
    }

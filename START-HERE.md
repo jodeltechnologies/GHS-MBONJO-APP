@@ -2,7 +2,32 @@
 
 No terminal commands are needed.
 
-## This update: timetables
+## This update: timetable preferences
+
+Principal → Timetable now opens with a **Timetable preferences** panel. Set the rules, then generate. Whatever you used is saved with the timetable and reopens here next time, so you are never starting from scratch.
+
+**School-wide**
+
+| Setting | Default | What it does |
+|---|---|---|
+| Form 5 closing time | 14:40 | 14:40 or 16:00 |
+| Latest period used | 10 | Stop lessons after period 6, 8 or any period. Forms 1 to 4 already close at 14:40, so periods 9 and 10 only ever apply to Form 5 on the 16:00 setting and to Sixth Form |
+| Most periods of one subject a class may have in a day | 2 | 2 allows one double. Set to 1 and that subject is taught in single periods only |
+| Most periods of one subject a class may have in a week | 10 | A guard against a mistyped assignment |
+| Most periods a teacher may teach in a day | 8 | A Form 1 to 4 day is 8 periods. Lowering it spreads a teacher over more days |
+| Most days a teacher comes to school | 5 | The school-wide ceiling |
+
+**Per subject** — one row for each subject in the assignments: blocks (Automatic, Doubles, Singles only), a Morning tick, and its own daily limit. Singles only suits Physical Education or Manual Labour. Morning is a preference, not a rule: a full week places the subject later rather than failing.
+
+**Per teacher** — one row for each teacher with assignments: tick the days they cannot come at all, and optionally their own maximum days and maximum periods a day. Leave the numbers empty to follow the school-wide setting.
+
+Everything is re-checked on the server, so the limits hold whatever the browser sends.
+
+If a combination cannot be met, the timetable is refused with a message naming the cause — for example *"One teacher is assigned 36 periods a week, but the preferences leave room for only 30 (5 days at up to 6 periods). Share that workload, allow more days, or raise the daily limit."* The existing timetable is left untouched until a new one succeeds.
+
+**Reset to defaults** puts the panel back without saving; nothing changes for the school until you press Generate.
+
+## Previous update: timetables
 
 The Timetable tab did not open at all — it called a function that was never finished. It works now, and the generator has been rewritten around the teachers.
 
@@ -40,7 +65,7 @@ If a student is told their record has no date of birth, open **Principal → Stu
 2. Unzip this package. Open the existing GitHub repository → Add file → Upload files. Upload the CONTENTS of website/ at the repository root, replacing the existing files. Commit the change. Keep the repository private because api/data/students.json contains student records.
 3. Wait for Vercel to show Ready. Close the school website and installed app, reopen, and refresh. Keep your existing environment variables.
 4. Test the student sign-in: open the portal, choose **Student**, enter one student's matricule and that student's date of birth. A wrong date must be refused.
-5. Open Principal → Timetable, confirm the Form 5 closing time and generate. Check one class sheet and one teacher sheet before printing for the school.
+5. Open Principal → Timetable. Set the preferences — closing time, latest period, the per-subject and per-teacher rows — then generate. Check one class sheet and one teacher sheet before printing for the school.
 
 ## Where to find the new features
 

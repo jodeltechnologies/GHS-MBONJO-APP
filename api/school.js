@@ -6,7 +6,7 @@ import {trustedOrigin} from '../src/origin.js';
 import {effectiveRole,canUseWriter,colleagueContacts} from '../src/posts.js';
 import {writingInstruction,cleanGeneratedText} from '../src/writing-style.js';
 import crypto from 'node:crypto';
-import {attestationText,classes,roles,normalizeMatricule,normalizeBirthDate,validateRecord,generateTimetable,studies,reportSummary} from '../src/domain.js';
+import {attestationText,classes,roles,normalizeMatricule,normalizeBirthDate,validateRecord,generateTimetable,normalizePreferences,studies,reportSummary} from '../src/domain.js';
 import {canRead,canWrite,admin,assigned} from '../src/access.js';
 const base=()=>process.env.SUPABASE_URL?.replace(/\/$/,''),key=()=>process.env.SUPABASE_SERVICE_ROLE_KEY;
 const fail=(message,status=400)=>{throw Object.assign(Error(message),{status})};
@@ -128,7 +128,22 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   else {if(!providers[c.provider])fail('Choose the AI provider again in settings.');url=providers[c.provider].base+'/chat/completions';headers={Authorization:`Bearer ${c.key}`};body={model:c.model,messages:[{role:'system',content:instruction},{role:'user',content:b.prompt}],max_tokens:1200};}
   const r=await fetch(url,{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(25000)});if(!r.ok)fail('The AI provider rejected this request. Check model, credits and key.',502);const a=await r.json();return res.json({text:cleanGeneratedText(a.candidates?.[0]?.content?.parts?.map(x=>x.text||'').join('')||a.choices?.[0]?.message?.content||'')});
  }
- if(op==='timetable'){if(!admin(p))fail('Principal or VP access required.',403);const assignments=all.filter(r=>r.kind==='assignment').map(r=>r.data);if(!assignments.length)fail('Add teacher assignments first.');const entries=generateTimetable(assignments,b.form5End,classNames);const data={title:'School timetable',entries,status:'published',form5End:b.form5End,generatedAt:new Date().toISOString()};const result=await db('rpc/school_save_record','POST',{record_kind:'timetable',record_data:data,actor_id:p.id});return res.json({row:result[0]});}
+ if(op==='timetable'){
+  if(!admin(p))fail('Principal or VP access required.',403);
+  const assignments=all.filter(r=>r.kind==='assignment').map(r=>r.data);
+  if(!assignments.length)fail('Add teacher assignments first.');
+  // Whatever the browser sent is re-checked here: the limits are enforced on the
+  // server, not by the form. Unknown subjects and staff are dropped, every number
+  // is clamped to its allowed range.
+  const preferences=normalizePreferences({...(b.preferences||{}),form5End:b.preferences?.form5End??b.form5End},
+   {subjectNames:[...new Set(assignments.map(a=>a.subject))],teacherIds:[...new Set(assignments.map(a=>a.teacherId))]});
+  let entries;
+  try{entries=generateTimetable(assignments,preferences.form5End,classNames,{preferences,deadlineMs:40000});}
+  catch(e){fail(e.message,400);}
+  const data={title:'School timetable',entries,status:'published',form5End:preferences.form5End,preferences,generatedAt:new Date().toISOString()};
+  const result=await db('rpc/school_save_record','POST',{record_kind:'timetable',record_data:data,actor_id:p.id});
+  return res.json({row:result[0]});
+ }
  if(op==='save'){
   const kind=b.kind,old=b.id?all.find(r=>r.id===b.id&&r.kind===kind):null;if(b.id&&!old)fail('Record not found.',404);let d={...b.data};
   if(kind==='exam_attempt')fail('Use the timed assessment workflow.');if(kind==='timetable')fail('Use the timetable generator to validate conflicts.');if(!canWrite(p,kind,d,old,all))fail('Your role cannot make this change.',403);
