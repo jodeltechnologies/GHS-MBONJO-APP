@@ -4,6 +4,20 @@ export const classes = [...Array.from({length:5},(_,i)=>['A','B'].map(s=>`Form $
 export const departments=['Mathematics','English','French','Physics','Biology','Computer Science','Food and Nutrition','Geography','History','Economics','Guidance and Counselling','Chemistry','Logic','Philosophy','Religious Studies','Physical Education'];
 export const roles=postCatalogue.map(p=>p.id);
 export const normalizeMatricule = v => String(v??'').trim().toUpperCase().replace(/[\s‐‑–—]/g,'').replace(/-/g,'');
+// Returns a calendar date as YYYY-MM-DD, or '' when the value is absent or not a real date.
+// Accepts the stored ISO form and the day/month/year form a phone keyboard may produce.
+// It never guesses between day and month: 03/04/2010 is read as 3 April 2010.
+export const normalizeBirthDate = v => {
+ const s=String(v??'').trim();if(!s)return '';
+ const iso=/^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+ const dmy=iso?null:/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(s);
+ if(!iso&&!dmy)return '';
+ const [y,m,d]=iso?[+iso[1],+iso[2],+iso[3]]:[+dmy[3],+dmy[2],+dmy[1]];
+ if(m<1||m>12||d<1||d>31||y<1900||y>2100)return '';
+ const t=new Date(Date.UTC(y,m-1,d));
+ if(t.getUTCFullYear()!==y||t.getUTCMonth()!==m-1||t.getUTCDate()!==d)return '';
+ return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+};
 export const promotionEligible = c => /^Form [1-4][A-Z]$/.test(c)||c.startsWith('Lower Sixth');
 export const studies=(student,subject)=>Array.isArray(student.requiredSubjects)?[...student.requiredSubjects,...(student.subjects||[])].includes(subject):!Array.isArray(student.subjects)||student.subjects.length===0||student.subjects.includes(subject);
 export function slotsFor(cls,day,form5End){

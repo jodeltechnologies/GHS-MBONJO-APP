@@ -6,7 +6,7 @@ import {trustedOrigin} from '../src/origin.js';
 import {effectiveRole,canUseWriter,colleagueContacts} from '../src/posts.js';
 import {writingInstruction,cleanGeneratedText} from '../src/writing-style.js';
 import crypto from 'node:crypto';
-import {attestationText,classes,roles,normalizeMatricule,validateRecord,generateTimetable,studies,reportSummary} from '../src/domain.js';
+import {attestationText,classes,roles,normalizeMatricule,normalizeBirthDate,validateRecord,generateTimetable,studies,reportSummary} from '../src/domain.js';
 import {canRead,canWrite,admin,assigned} from '../src/access.js';
 const base=()=>process.env.SUPABASE_URL?.replace(/\/$/,''),key=()=>process.env.SUPABASE_SERVICE_ROLE_KEY;
 const fail=(message,status=400)=>{throw Object.assign(Error(message),{status})};
@@ -32,9 +32,17 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
  if(op==='login'){
   await rate(req,'login');
   if(b.mode==='student'){
-   if(process.env.ALLOW_MATRICULE_LOGIN!=='true')fail('Student matricule access has not yet been enabled by the school.',403);
-   const m=normalizeMatricule(b.matricule);if(!/^[A-Z0-9]{5,25}$/.test(m))fail('Invalid login.',401);
-   const rows=await db(`school_records?kind=eq.student&data->>matricule=eq.${encodeURIComponent(m)}`);const r=rows[0];if(!r||['dismissed','transferred out'].includes(r.data.status))fail('Invalid login.',401);issue(res,{studentId:r.id});return res.json({ok:true});
+   // A matricule is an identifier, not a secret: it is printed on report cards and known to classmates.
+   // The student's own date of birth is required as a second factor. It is never sent to the database
+   // in a query string; the record is fetched by matricule and the date compared here.
+   const m=normalizeMatricule(b.matricule);const dob=normalizeBirthDate(b.birthDate);
+   if(!/^[A-Z0-9]{5,25}$/.test(m)||!dob)fail('Invalid login.',401);
+   const rows=await db(`school_records?kind=eq.student&data->>matricule=eq.${encodeURIComponent(m)}`);const r=rows[0];
+   if(!r||['dismissed','transferred out'].includes(r.data.status))fail('Invalid login.',401);
+   const stored=normalizeBirthDate(r.data.birthDate);
+   if(!stored)fail('Your school record has no date of birth yet. Ask the school administration to complete it.',403);
+   if(stored!==dob)fail('Invalid login.',401);
+   issue(res,{studentId:r.id});return res.json({ok:true});
   }
   const r=await fetch(`${base()}/auth/v1/token?grant_type=password`,{method:'POST',headers:{apikey:key(),'Content-Type':'application/json'},body:JSON.stringify({email:b.email,password:b.password})});const auth=await r.json();if(!r.ok)fail('Email or password is incorrect.',401);
   const profiles=await db(`school_records?kind=eq.profile&data->>authId=eq.${auth.user.id}`);if(!profiles[0]||profiles[0].data.active===false)fail('Contact the principal to activate your school role.',403);issue(res,{authId:auth.user.id,accessToken:auth.access_token});return res.json({ok:true});

@@ -31,7 +31,7 @@ Production build succeeds. Export and spreadsheet libraries load on demand. Publ
 
 ## Remaining checks and limits
 
-- Apply update-003.sql and check live authentication, role assignments, database constraints, real multi-user concurrency and backups. Existing matricule-only student access remains an identifier-only login by school request. It is weaker than a separate secret.
+- Apply update-003.sql and check live authentication, role assignments, database constraints, real multi-user concurrency and backups. Student access now requires the matricule and the student's own date of birth. Confirm on the live deployment that a correct pair signs in, a wrong date does not, and a record with a blank date of birth shows the administration message.
 - Browser preview was blocked/unavailable for this static project. Mobile widths, actual buttons/forms, print pagination, keyboard focus order, colour contrast ratios, screen-reader behaviour, PWA installation, JavaScript console and real performance need live browser checks. No claim of WCAG conformance or full end-to-end certification is made.
 - Test the principal, HOD, teacher, parent and student accounts with non-production records before rollout.
 - Tests do not use actual AI keys. Free credits and model availability vary. A provider may reject a discovered model due to account or quota limits.

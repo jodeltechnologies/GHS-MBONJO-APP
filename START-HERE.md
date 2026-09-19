@@ -2,9 +2,24 @@
 
 No terminal commands are needed.
 
+## This update: students can now sign in
+
+Students were seeing **"Student matricule access has not yet been enabled by the school."** That block has been removed.
+
+Students now sign in with **their matricule and their own date of birth**. Both must match the school register. There is nothing to switch on in Vercel: upload this update (step 2 below) and student sign-in works.
+
+Why the date of birth is asked for: a matricule is printed on report cards and known to classmates, so a matricule on its own would let one student sign in as another and read their marks. The date of birth is the second factor that stops that. All 92 students in the supplied register already have one, so there is nothing to enter.
+
+The old `ALLOW_MATRICULE_LOGIN` setting is no longer used. You may delete it from Vercel → Settings → Environment Variables; leaving it there changes nothing. **No SQL is needed for this fix**, and no other environment variable changes.
+
+If a student is told their record has no date of birth, open **Principal → Students**, choose their class and name, add the date, and they can sign in at once.
+
+## Steps
+
 1. Open Supabase → SQL Editor → New query. Paste website/supabase/update-003.sql and click Run. Keep the existing database. Do not rerun schema.sql. If you never applied update-002.sql, apply that older update first.
 2. Unzip this package. Open the existing GitHub repository → Add file → Upload files. Upload the CONTENTS of website/ at the repository root, replacing the existing files. Commit the change. Keep the repository private because api/data/students.json contains student records.
 3. Wait for Vercel to show Ready. Close the school website and installed app, reopen, and refresh. Keep your existing environment variables.
+4. Test the student sign-in: open the portal, choose **Student**, enter one student's matricule and that student's date of birth. A wrong date must be refused.
 
 ## Where to find the new features
 
