@@ -2,7 +2,19 @@
 
 No terminal commands are needed.
 
-## This update: the department office
+## This update: Form 5, and importing a sheet from its PDF
+
+**Computer Science Form 5 is now included**, so all nine sheets ship with the app: Computer Science Forms 1 to 5 and Lower and Upper Sixth, and ICT Lower and Upper Sixth — 901 lessons in total.
+
+**A progression sheet can now be imported straight from its PDF.** *Import a sheet* accepts the PDF itself, in the national format — the same format as the Computer Science and ICT sheets. Excel and CSV still work as before.
+
+The app reads the table out of the PDF: the lesson numbers, titles, objectives, weeks and terms. Both layouts are handled — the Form 1 to 5 sheets, which print the number inside the title as "Lesson 6:", and the Sixth Form sheets, which give the number a column of its own.
+
+**Nothing is saved until you have looked at it.** The import shows how many lessons it found, how many are numbered, how many have objectives, which terms and weeks they span, and the first dozen lessons in a table. Check those against your sheet, then choose *Save this scheme*. A progression sheet is a record, and importing the wrong thing quietly would be worse than not importing at all.
+
+A scanned sheet — a photograph of paper rather than a PDF with real text in it — cannot be read this way, and the app says so rather than importing nothing. Reading a nine-page sheet takes about ten seconds.
+
+## Previous update: the department office
 
 **This update needs SQL.** Run `website/supabase/update-004.sql` in the Supabase SQL Editor before uploading the files — it adds four new record types. Everything else is unchanged.
 

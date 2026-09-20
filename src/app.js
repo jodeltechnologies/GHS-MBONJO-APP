@@ -1,6 +1,7 @@
 import {subjectCatalogue,availableSubjects,recommendSubjects,academicYear,competency} from './academics.js';
 import {barChart,columnChart,lineChart,statTile,figureTable,shorten} from './charts.js';
 import {documentLibrary,categoryLabels,canTransmit,inventorySummary,coverage,coveragePrompt,lessonKey,termOfWeek,parseProgressionRows,TERMS} from './department.js';
+import {lessonsFromPages,sheetHeading,describeImport} from './progression-pdf.js';
 import {providers} from './providers.js';
 import {requestTypes,officialTypes,requestingStaff,requestState} from './document-requests.js';
 import {documentTitles,documentLines,letterheadEN,letterheadFR,displayDate} from './document-layout.js';
@@ -195,7 +196,27 @@ function officialLetter(request=null){modal('Official letterhead document',`<for
 // progression sheet. The administration sees the equipment always and a document
 // only once it has been transmitted.
 let deptFilter='',msgThread='',msgRows=[],msgColleagues=[],msgLoaded=false;
-let progSheets=[],progSheetCache={},progPick={subject:'',class:''},progWeek='';
+let progSheets=[],progSheetCache={},progPick={subject:'',class:''},progWeek='',progImport=null;
+// The PDF reader is loaded only when a PDF is actually imported, so the library
+// never rides on an ordinary page load. Its worker is disabled: the app's
+// Content-Security-Policy allows scripts from this origin only, and a progression
+// sheet is small enough to read on the main thread.
+async function readProgressionPdf(file){
+ if(!file)throw Error(t('Choose a file first.','Choisissez d’abord un fichier.'));
+ if(file.size>12000000)throw Error(t('Use a PDF smaller than 12 MB.','Utilisez un PDF de moins de 12 Mo.'));
+ const lib=await import('pdfjs-dist/legacy/build/pdf.mjs');
+ lib.GlobalWorkerOptions.workerSrc='/pdf.worker.js';
+ const doc=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer()),disableFontFace:true,isEvalSupported:false,useWorkerFetch:false}).promise;
+ const pages=[];
+ for(let n=1;n<=doc.numPages;n++){
+  const content=await (await doc.getPage(n)).getTextContent();
+  pages.push(content.items.filter(i=>i.str).map(i=>({str:i.str,x:i.transform[4],y:i.transform[5],width:i.width,rotated:Math.abs(i.transform[1])>0.01})));
+ }
+ const lessons=lessonsFromPages(pages);
+ if(!lessons.length)throw Error(t('No lessons were found in that PDF. Check that it is a progression sheet rather than a scan.','Aucune leçon trouvée dans ce PDF. Vérifiez qu’il s’agit bien d’une fiche de progression et non d’un scan.'));
+ const heading=sheetHeading(pages[0]);
+ return {lessons,sourceTitle:heading.title||file.name,weeklyPeriods:heading.weeklyPeriods};
+}
 const nameOrSelf=id=>id===profile.id?t('you','vous'):name(id);
 const admin=p=>['principal','vp'].includes(p.role);
 const todayISO=()=>new Date().toISOString().slice(0,10);
@@ -645,16 +666,24 @@ document.addEventListener('click',async e=>{const el=e.target.closest('[data-act
  }
  if(action==='prog-import'){
   modal(t('Import a progression sheet','Importer une fiche de progression'),
-   `<form id="prog-import-form"><p>${t('Upload an Excel or CSV version of your sheet. It needs a heading row with at least a Lesson title column; Term, Week, Module, Category of action, Lesson no and Objectives are used if present.','Téléversez votre fiche au format Excel ou CSV. Une ligne d’en-tête avec au moins « Lesson title » est requise ; Term, Week, Module, Category of action, Lesson no et Objectives sont repris s’ils existent.')}</p>
+   `<form id="prog-import-form"><p>${t('Upload the progression sheet. A PDF in the national format is read directly — the same format as the Computer Science and ICT sheets already in the app. An Excel or CSV version also works, and needs a heading row with at least a Lesson title column.','Téléversez la fiche de progression. Un PDF au format national est lu directement — le même format que les fiches d’informatique déjà intégrées. Une version Excel ou CSV convient aussi, avec une ligne d’en-tête comportant au moins « Lesson title ».')}</p>
     <div class="form-grid">
      <label>${t('Subject','Matière')}<input name="subject" required value="${esc(profile.department||'')}"></label>
      <label>${t('Class','Classe')}<select name="class" required>${options(classes)}</select></label>
      <label>${t('Academic year','Année scolaire')}<input name="year" value="${esc(academicYear())}" required></label>
      <label>${t('Current school week','Semaine en cours')}<input type="number" name="currentWeek" min="1" max="40" step="1" value="1"></label>
     </div>
-    <label class="wide">${t('File','Fichier')}<input type="file" name="file" accept=".csv,.xlsx" required></label>
+    <label class="wide">${t('File','Fichier')}<input type="file" name="file" accept=".pdf,.csv,.xlsx" required><small>${t('The PDF of the sheet itself, or an Excel or CSV version of it.','Le PDF de la fiche, ou une version Excel ou CSV.')}</small></label>
     <div class="actions"><button class="primary">${t('Import','Importer')}</button>${button(t('Cancel','Annuler'),'close','secondary')}</div>
     <p class="error" id="form-error" role="alert"></p></form><div id="prog-import-preview"></div>`);
+ }
+ if(action==='prog-import-confirm'){
+  if(!progImport)return;
+  const p=progImport;
+  await api('save',{kind:'progression',data:{department:profile.department,subject:p.subject,class:p.class,
+   year:p.year,currentWeek:p.currentWeek,sourceTitle:p.sourceTitle,lessons:p.lessons,taught:{}}});
+  progImport=null;$('#modal').close();await refresh();
+  toast(`${p.lessons.length} ${t('lessons imported.','leçons importées.')}`);
  }
  if(action==='prog-open'){
   const r=byId(id),d=r.data,c=coverage(d.lessons||[],d.taught||{},{currentWeek:d.currentWeek||null});
@@ -785,11 +814,25 @@ document.addEventListener('submit',async e=>{e.preventDefault();const form=e.tar
  }
  if(form.id==='prog-import-form'){
   const file=form.elements.file.files[0];
-  const matrix=await readSheet(file);
-  const lessons=parseProgressionRows(matrix);
-  await api('save',{kind:'progression',data:{department:profile.department,subject:data.subject,class:data.class,
-   year:data.year,currentWeek:Number(data.currentWeek)||null,sourceTitle:file.name,lessons,taught:{}}});
-  $('#modal').close();await refresh();toast(`${lessons.length} ${t('lessons imported.','leçons importées.')}`);
+  const pdf=/\.pdf$/i.test(file?.name||'');
+  const {lessons,sourceTitle}=pdf?await readProgressionPdf(file):{lessons:parseProgressionRows(await readSheet(file)),sourceTitle:file.name};
+  // Nothing is saved until the head of department has seen what was read. A
+  // progression sheet is a record, and importing the wrong thing silently would
+  // be worse than not importing at all.
+  progImport={lessons,sourceTitle,subject:data.subject,class:data.class,year:data.year,currentWeek:Number(data.currentWeek)||null};
+  const d=describeImport(lessons);
+  $('#prog-import-preview').innerHTML=`<h3>${t('What was read','Ce qui a été lu')}</h3>
+   <div class="stats an-stats">
+    ${statTile(t('Lessons','Leçons'),d.lessons,{note:`${d.numbered} ${t('numbered','numérotées')}`,tone:d.lessons>10?'good':'poor'})}
+    ${statTile(t('With objectives','Avec objectifs'),d.withObjectives,{tone:d.withObjectives?'good':'fair'})}
+    ${statTile(t('Terms','Trimestres'),d.terms,{note:d.firstWeek?`${t('weeks','semaines')} ${d.firstWeek}–${d.lastWeek}`:'',tone:d.terms===3?'good':'fair'})}
+   </div>
+   <p class="muted small">${t('Check the first lessons below against your sheet before saving.','Vérifiez les premières leçons ci-dessous avant d’enregistrer.')}</p>
+   <div class="table-scroll"><table><thead><tr><th>${t('Week','Semaine')}</th><th>#</th><th>${t('Lesson','Leçon')}</th><th>${t('Objectives','Objectifs')}</th></tr></thead><tbody>
+    ${lessons.slice(0,12).map(l=>`<tr><td>${esc(l.week||'—')}</td><td>${esc(l.number??'—')}</td><td>${esc(l.title)}</td><td>${l.objectives.length}</td></tr>`).join('')}
+   </tbody></table></div>
+   ${lessons.length>12?`<p class="muted small">${t('and','et')} ${lessons.length-12} ${t('more.','de plus.')}</p>`:''}
+   <div class="actions">${button(t('Save this scheme','Enregistrer ce programme'),'prog-import-confirm','primary')}${button(t('Cancel','Annuler'),'close','secondary')}</div>`;
   return;
  }
  if(form.id==='prog-mark-form'){

@@ -31,6 +31,7 @@ Production build succeeds. Export and spreadsheet libraries load on demand. Publ
 
 ## Remaining checks and limits
 
+- Check a PDF import on the live deployment with a sheet from another department, and read the preview counts before saving. A scanned sheet has no text to read and is refused; that is expected.
 - Apply update-004.sql before uploading this version, or every department feature fails on save with a database error.
 - Check the departmental boundaries on the live deployment: as the principal, confirm a department's untransmitted document and its staff messages are not visible, that its equipment is, and that a transmitted document appears. Confirm the PC backup export contains no message rows.
 - Tell staff plainly that messages are private from the principal in the portal but readable by whoever administers the database. The page says so; the school should say so too.

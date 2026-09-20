@@ -133,11 +133,17 @@ These rules sit in `src/access.js` *above* the principal's blanket read and writ
 
 ### Progression and coverage
 
-Eight progression sheets ship with the app — Computer Science Forms 1 to 4 and Lower and Upper Sixth, and ICT Lower and Upper Sixth — extracted from the 2026-2027 national and departmental sheets into `api/data/progression.json`, 785 lessons in total. A department adopts a sheet, records which school week it is in, and ticks lessons as they are taught. Coverage is then measured against the sheet rather than against the timetable: a lesson counts when somebody marks it taught.
+Nine progression sheets ship with the app — Computer Science Forms 1 to 5 and Lower and Upper Sixth, and ICT Lower and Upper Sixth — read out of the 2026-2027 national and departmental PDFs into `api/data/progression.json`, 901 lessons in total. They are produced by the same parser the import uses, so the bundled sheets and an imported one are read identically. A department adopts a sheet, records which school week it is in, and ticks lessons as they are taught. Coverage is then measured against the sheet rather than against the timetable: a lesson counts when somebody marks it taught.
 
 Terms follow the week, as every supplied sheet does: weeks 1 to 12, 13 to 24, and 25 onwards. The module column of the source PDFs is printed vertically and interleaves with its neighbours when extracted, so a module label is kept only where it still reads as words and lessons are grouped by term and week instead.
 
-Departments whose sheet is not bundled import an Excel or CSV file needing only a *Lesson title* column. The AI note is built from counts and lesson titles alone — `coveragePrompt` in `src/department.js` — so no student data is sent to the provider.
+Departments whose sheet is not bundled import the PDF itself. `src/progression-pdf.js` reads the table from positioned text, which `pdfjs-dist` supplies in the browser; the parser takes that text and returns lessons, so it runs and is tested without the PDF library.
+
+Columns are not taken from the header. Header cells are centred over their column while the contents are left-aligned, so a boundary drawn from the header lands in the wrong place — and "WEEKLY WORKLOAD: 3 periods" in the page furniture reads as a "Week" heading. Two things in the body do hold still and everything is measured from them: the lesson marker, and the bullet in front of every objective. Rows are the markers: everything between one and the next belongs to that lesson. The Sixth Form sheets carry no "Lesson N:" text at all, so their number column is found by clustering the bare integers and taking the column with the most distinct values — weeks repeat across their lessons, lesson numbers do not.
+
+The unnumbered rows that punctuate these sheets — the diagnostic evaluation, the integration activities, the remediation weeks — are recognised by name. That is the one place a lesson is identified by what it says rather than where it sits, and it is why those rows are not swallowed into the lesson printed above them.
+
+Nothing is saved until the import has been reviewed: the screen reports how many lessons were found, how many are numbered, how many carry objectives, the terms and weeks covered, and the first dozen rows. An Excel or CSV file needing only a *Lesson title* column is still accepted. The AI note is built from counts and lesson titles alone — `coveragePrompt` in `src/department.js` — so no student data is sent to the provider.
 
 ### Analytics
 

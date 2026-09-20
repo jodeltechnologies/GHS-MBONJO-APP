@@ -307,13 +307,17 @@ test('an import without a lesson title column is refused with a reason',()=>{
 // The bundled sheets
 // ---------------------------------------------------------------------------
 test('the supplied progression sheets are usable as shipped',()=>{
- assert.equal(sheets.length,8);
+ assert.equal(sheets.length,9,'Form 5 was added alongside the original eight');
  for(const s of sheets){
   assert.ok(s.subject&&s.class,'every sheet names its subject and class');
   assert.ok(s.lessons.length>50,`${s.subject} ${s.class} has only ${s.lessons.length} lessons`);
   assert.ok(s.lessons.every(l=>l.title&&l.title.length>2),'every lesson has a title');
-  const terms=new Set(s.lessons.map(l=>l.term));
+  const terms=new Set(s.lessons.map(l=>l.term).filter(Boolean));
   assert.equal(terms.size,3,`${s.subject} ${s.class} should cover three terms`);
+  // A lesson printed above the first week number on the sheet has no week, and
+  // so no term. That is honest, but it should be a handful at most.
+  const undated=s.lessons.filter(l=>!l.term).length;
+  assert.ok(undated<=3,`${s.subject} ${s.class}: ${undated} lessons have no week`);
   const weeks=s.lessons.map(l=>l.week).filter(Number.isFinite);
   assert.ok(Math.min(...weeks)>=1&&Math.max(...weeks)<=40);
   // the term always agrees with the week
@@ -321,6 +325,7 @@ test('the supplied progression sheets are usable as shipped',()=>{
  }
  assert.ok(sheets.some(s=>s.subject==='ICT'));
  assert.ok(sheets.some(s=>s.subject==='Computer Science'&&s.class==='Form 1'));
+ assert.ok(sheets.some(s=>s.subject==='Computer Science'&&s.class==='Form 5'));
 });
 
 test('a bundled sheet can be tracked and marked end to end',()=>{
