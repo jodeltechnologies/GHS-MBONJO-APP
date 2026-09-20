@@ -2,7 +2,20 @@
 
 No terminal commands are needed.
 
-## This update: Form 5, and importing a sheet from its PDF
+## This update: finding a progression sheet, and the real school calendar
+
+**You can now open a progression sheet from your department page.** Under **My department** there is a *Progression sheets* panel at the top: choose a class and a subject, press *Open the sheet*, and the whole scheme appears — term by term, week by week, with the lesson numbers, titles and objectives. You do not have to be tracking the sheet to read it. The principal and the vice principals reach the same panel by choosing a department, so they can read any department's scheme without being able to tick anything in it.
+
+**Nobody types the school week any more.** The app now carries the official calendar for 2026/2027 — Joint Order N° 002/26/JO/MINEDUB/MINESEC of 14 August 2026 — which opens the year on Monday 7 September 2026 and runs 36 working weeks. The department page says which week the school is in, which term it belongs to and its dates, and every *expected by now* and *behind* figure is worked out from it. The Christmas and Easter holidays are not counted as teaching weeks. During a holiday the app measures against the last week taught, not the week ahead. If you ever need to measure against a different week, *Mark lessons* still lets you enter one.
+
+**Subjects can be split.** A sheet is written for a level — one Form 1 sheet covers both Form 1A and Form 1B. When you adopt or import a sheet you now choose:
+
+- *One scheme for the whole level* — Form 1A and Form 1B counted together. This is the default and it is what most subjects want.
+- *Split the subject: one scheme per class* — a separate scheme for each class you tick, each with its own ticks and its own coverage. Use this where the classes are not at the same point, because they have different teachers or one lost a week.
+
+You can do both in the same department: split Computer Science and leave another subject whole.
+
+## Previous update: Form 5, and importing a sheet from its PDF
 
 **Computer Science Form 5 is now included**, so all nine sheets ship with the app: Computer Science Forms 1 to 5 and Lower and Upper Sixth, and ICT Lower and Upper Sixth — 901 lessons in total.
 
@@ -30,9 +43,9 @@ A head of department now has their own working area under **My department**, and
 
 Be clear with your staff about what that means: **these messages are not encrypted.** Whoever holds the Supabase password can read them in the database directly, and the messages page says so on screen. It keeps conversations out of the principal's screens; it is not a guarantee of secrecy.
 
-**Progression and coverage.** Eight progression sheets are built in — Computer Science Forms 1 to 4, Computer Science Lower and Upper Sixth, and ICT Lower and Upper Sixth — with 785 lessons between them, taken from the 2026-2027 sheets. Choose *Track a scheme*, say which week the school is in, and tick lessons as they are taught. The dashboard then shows what has been covered, what the sheet expects by now, and how many lessons behind the subject is.
+**Progression and coverage.** Nine progression sheets are built in — Computer Science Forms 1 to 5 and Lower and Upper Sixth, and ICT Lower and Upper Sixth — with 901 lessons between them, taken from the 2026-2027 sheets. Choose *Track a scheme* and tick lessons as they are taught. The dashboard then shows what has been covered, what the sheet expects by now, and how many lessons behind the subject is. The week comes from the school calendar; you no longer enter it.
 
-Other departments use **Import a sheet**: an Excel or CSV file with a heading row containing at least a *Lesson title* column. *Term*, *Week*, *Module*, *Category of action*, *Lesson no* and *Objectives* are used when present, and the term is worked out from the week if it is not given.
+Other departments use **Import a sheet**: the PDF of the sheet itself, or an Excel or CSV file with a heading row containing at least a *Lesson title* column. *Term*, *Week*, *Module*, *Category of action*, *Lesson no* and *Objectives* are used when present, and the term is worked out from the week if it is not given. You say which level the sheet is written for, and whether to split it across that level's classes.
 
 **Ask the AI** reads the coverage figures and writes a short note on what to prioritise. It is sent only lesson titles, weeks and counts — never a student's name or any personal data — and the note is saved with the scheme.
 

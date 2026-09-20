@@ -1,6 +1,19 @@
 import {requestTypes} from './document-requests.js';
 import {postCatalogue} from './posts.js';
 export const classes = [...Array.from({length:5},(_,i)=>['A','B'].map(s=>`Form ${i+1}${s}`)).flat(),'Lower Sixth Arts','Lower Sixth Science','Upper Sixth Arts','Upper Sixth Science'];
+// A progression sheet is written for a level, not for a stream: one sheet covers
+// Form 1A and Form 1B alike. A department that wants to follow its streams apart
+// — because different teachers are at different points — tracks the sheet once
+// per class instead, which is what splitting a subject means here.
+export const levels=['Form 1','Form 2','Form 3','Form 4','Form 5','Lower Sixth','Upper Sixth'];
+export function levelOf(cls){
+ const form=/^Form\s*([1-5])/i.exec(String(cls||'').trim());
+ if(form)return `Form ${form[1]}`;
+ if(/lower\s*sixth/i.test(cls||''))return 'Lower Sixth';
+ if(/upper\s*sixth/i.test(cls||''))return 'Upper Sixth';
+ return String(cls||'').trim();
+}
+export const classesInLevel=(level,all=classes)=>all.filter(c=>levelOf(c)===levelOf(level));
 // Department paperwork is filed under one of these, which is how the HOD's
 // document library groups it.
 export const documentCategories=['report','minutes','letter','note'];

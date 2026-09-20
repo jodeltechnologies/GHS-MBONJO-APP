@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {canRead,canWrite,sameDepartment,inThread,staff} from '../src/access.js';
-import {documentLibrary,canTransmit,inventorySummary,coverage,lessonKey,termOfWeek,schoolWeek,
+import {documentLibrary,canTransmit,inventorySummary,coverage,lessonKey,termOfWeek,weekInHand,
         coveragePrompt,parseProgressionRows,categoryLabels} from '../src/department.js';
 import {validateRecord,documentCategories,itemCategories,classes} from '../src/domain.js';
 import sheets from '../api/data/progression.json' with {type:'json'};
@@ -263,9 +263,24 @@ test('terms follow the week, as every supplied sheet does',()=>{
  assert.equal(termOfWeek(null),'');
  assert.equal(termOfWeek(0),'');
  assert.equal(termOfWeek('7'),'First Term');
- assert.equal(schoolWeek('2026-09-21','2026-09-07'),3);
- assert.equal(schoolWeek('2026-09-07','2026-09-07'),1);
- assert.equal(schoolWeek('2026-09-01','2026-09-07'),null,'a date before the term has no week');
+ });
+
+test('the week a scheme is measured against comes from the ministry calendar',()=>{
+ // The year opens on 7 September 2026, so the third week of teaching is week 3.
+ assert.equal(weekInHand({year:'2026/2027'},'2026-09-21'),3);
+ assert.equal(weekInHand({year:'2026/2027'},'2026-09-07'),1);
+ // Counting days since September would make 11 January week 19. The calendar
+ // knows about the three weeks of Christmas holiday: it is week 17.
+ assert.equal(weekInHand({year:'2026/2027'},'2027-01-11'),17);
+ // Nothing is due before the year opens.
+ assert.equal(weekInHand({year:'2026/2027'},'2026-08-31'),null);
+ // A year the calendar does not carry falls back to what was typed in.
+ assert.equal(weekInHand({year:'2030/2031',currentWeek:9},'2026-09-21'),9);
+ assert.equal(weekInHand({year:'2030/2031'},'2026-09-21'),null);
+ // A week entered by hand wins over the calendar, for a department reviewing
+ // an earlier week.
+ assert.equal(weekInHand({year:'2026/2027',weekOverride:5},'2026-09-21'),5);
+ assert.equal(weekInHand({year:'2026/2027',weekOverride:''},'2026-09-21'),3,'a blank override is not week zero');
 });
 
 test('the AI prompt carries counts and lesson titles, and no personal data',()=>{

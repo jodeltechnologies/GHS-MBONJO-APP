@@ -7,6 +7,7 @@
 // rules, so nothing here decides who may see what.
 
 import {documentCategories,itemCategories,itemConditions} from './domain.js';
+import {currentWeek} from './calendar.js';
 
 // ---------------------------------------------------------------------------
 // Documents
@@ -120,14 +121,20 @@ export function coverage(lessons=[],taught={},{currentWeek=null}={}){
   lastTaught:done.map(r=>r.record?.date).filter(Boolean).sort().at(-1)||''};
 }
 
-// The school week a date falls in, counting from the first day of the year's
-// first term. Used to offer the department a sensible default rather than making
-// them count weeks on a calendar.
-export function schoolWeek(date,termStart){
- if(!date||!termStart)return null;
- const a=Date.parse(termStart+'T00:00:00Z'),b=Date.parse(date+'T00:00:00Z');
- if(!Number.isFinite(a)||!Number.isFinite(b)||b<a)return null;
- return Math.floor((b-a)/(7*86400000))+1;
+// The school week a scheme should be measured against today. It comes from the
+// ministry's calendar for that academic year, which knows where the holidays
+// are — dividing the days since September by seven does not, and counts the
+// Christmas and Easter holidays as teaching weeks.
+//
+// A week typed in by hand still wins, for a year the calendar does not carry or
+// a department that is deliberately reviewing an earlier week.
+export function weekInHand(d={},today=''){
+ const override=Number(d.weekOverride);
+ if(Number.isFinite(override)&&override>0)return override;
+ const fromCalendar=currentWeek(today||new Date().toISOString().slice(0,10),d.year);
+ if(fromCalendar)return fromCalendar;
+ const stored=Number(d.currentWeek);
+ return Number.isFinite(stored)&&stored>0?stored:null;
 }
 
 // What the AI is asked to comment on. Built here rather than in the browser so the

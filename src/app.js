@@ -1,6 +1,7 @@
 import {subjectCatalogue,availableSubjects,recommendSubjects,academicYear,competency} from './academics.js';
 import {barChart,columnChart,lineChart,statTile,figureTable,shorten} from './charts.js';
-import {documentLibrary,categoryLabels,canTransmit,inventorySummary,coverage,coveragePrompt,lessonKey,termOfWeek,parseProgressionRows,TERMS} from './department.js';
+import {documentLibrary,categoryLabels,canTransmit,inventorySummary,coverage,coveragePrompt,lessonKey,termOfWeek,weekInHand,parseProgressionRows,TERMS} from './department.js';
+import {calendar,schoolWeek,currentWeek,weekRange,knownYear,defaultYear} from './calendar.js';
 import {lessonsFromPages,sheetHeading,describeImport} from './progression-pdf.js';
 import {providers} from './providers.js';
 import {requestTypes,officialTypes,requestingStaff,requestState} from './document-requests.js';
@@ -10,7 +11,7 @@ import {postCatalogue,postOptions,whatsappLink} from './posts.js';
 import {exportModel,loadExportAssets,makeDocx,makePdf,downloadBlob} from './exports.js';
 import {encryptBackup} from './backup.js';
 import QRCode from 'qrcode';
-import {classes as baseClasses,departments,roles,normalizeMatricule,promotionEligible,time,clockTime,attestationText,reportSummary,studies,documentCategories,itemCategories,itemConditions,timetablePeriods,timetableBreak,timetableDays,timetableRow,timetableFor,subjectCode,defaultPreferences,normalizePreferences} from './domain.js';
+import {classes as baseClasses,levels,levelOf,classesInLevel,departments,roles,normalizeMatricule,promotionEligible,time,clockTime,attestationText,reportSummary,studies,documentCategories,itemCategories,itemConditions,timetablePeriods,timetableBreak,timetableDays,timetableRow,timetableFor,subjectCode,defaultPreferences,normalizePreferences} from './domain.js';
 import archive from './archive.json';
 const $=s=>document.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let classes=[...baseClasses];
@@ -75,7 +76,7 @@ function portalContent(){
  const r=profile.role,isAdmin=['principal','vp'].includes(r);
  if(tab==='academics')return academicsPanel();
  if(tab==='requests')return requestsPanel();
- if(tab==='overview')return `<div class="welcome-panel"><div><p class="eyebrow">${today()}</p><h2>${t('Welcome,','Bienvenue,')} ${esc(profile.name.split(' ')[0])}.</h2><p>${t('Your school information, all in one place.','Vos informations scolaires réunies en un seul endroit.')}</p></div><img src="/crest.jpg" alt="School crest"></div><div class="stats">${[[list('student').length,t('Visible students','Élèves visibles')],[list('resource').filter(x=>x.data.status==='pending').length,t('Notes awaiting approval','Notes en attente')],[list('assignment').length,t('Teaching assignments','Affectations')]].map(([n,s])=>`<article><strong>${n}</strong><span>${s}</span></article>`).join('')}</div>${r==='principal'?`<section class="panel priority-panel"><h2>Principal’s desk</h2><div class="actions">${button('Marks & report cards','tab','primary','data-tab="marks"')}${button('Document requests ('+list('document_request').filter(x=>requestState(x,list('document')).status==='pending').length+')','tab','secondary','data-tab="requests"')}${button('Write an official document','official-letter','secondary')}</div>${requestsPanel(true)}</section>`:''}<h2>${t('Quick actions','Actions rapides')}</h2><div class="cards two">${allowedTabs().filter(x=>!['overview','profile','audit','settings'].includes(x)).slice(0,6).map(k=>`<button class="action-card" data-action="tab" data-tab="${k}"><strong>${lang==='fr'?frTabs[k]:tabs[k]}</strong><span>↗</span></button>`).join('')}</div>`;
+ if(tab==='overview')return `<div class="welcome-panel"><div><p class="eyebrow">${today()}</p><h2>${t('Welcome,','Bienvenue,')} ${esc(profile.name.split(' ')[0])}.</h2><p>${t('Your school information, all in one place.','Vos informations scolaires réunies en un seul endroit.')}</p></div><img src="/crest.jpg" alt="School crest"></div>${r==='student'||r==='parent'?'':calendarBanner()}<div class="stats">${[[list('student').length,t('Visible students','Élèves visibles')],[list('resource').filter(x=>x.data.status==='pending').length,t('Notes awaiting approval','Notes en attente')],[list('assignment').length,t('Teaching assignments','Affectations')]].map(([n,s])=>`<article><strong>${n}</strong><span>${s}</span></article>`).join('')}</div>${r==='principal'?`<section class="panel priority-panel"><h2>Principal’s desk</h2><div class="actions">${button('Marks & report cards','tab','primary','data-tab="marks"')}${button('Document requests ('+list('document_request').filter(x=>requestState(x,list('document')).status==='pending').length+')','tab','secondary','data-tab="requests"')}${button('Write an official document','official-letter','secondary')}</div>${requestsPanel(true)}</section>`:''}<h2>${t('Quick actions','Actions rapides')}</h2><div class="cards two">${allowedTabs().filter(x=>!['overview','profile','audit','settings'].includes(x)).slice(0,6).map(k=>`<button class="action-card" data-action="tab" data-tab="${k}"><strong>${lang==='fr'?frTabs[k]:tabs[k]}</strong><span>↗</span></button>`).join('')}</div>`;
  if(tab==='profile')return `<div class="panel"><p>${t('Keep your contact details, photograph and service dates up to date. Administrative roles are assigned by the principal.','Actualisez vos coordonnées, votre photo et vos dates de service. Le proviseur attribue les rôles administratifs.')}</p>${button(t('Update my profile','Modifier mon profil'),'edit','primary',`data-id="${profile.id}"`)}${button(t('Change password','Modifier le mot de passe'),'password','secondary')}${table(list('profile').filter(x=>x.id===profile.id),['name','department','publicServiceDate','schoolAssumptionDate','rank'],false)}</div>`;
  if(tab==='students')return `${isAdmin?toolbar('student',button(t('Import Excel / CSV','Importer Excel / CSV'),'import','secondary','data-kind="student"')):''}<p class="muted">${t('Class changes preserve the student’s identity and historical records.','Les changements de classe conservent l’identité et les dossiers antérieurs de l’élève.')}</p><div class="panel form-grid"><label>${t('Choose a class','Choisir une classe')}<select id="student-class"><option value="">${t('Select class','Sélectionner une classe')}</option>${options([...new Set(list('student').map(x=>x.data.class))].sort(),studentClass)}</select></label><label>${t('Choose a student','Choisir un élève')}<select id="student-query" ${!studentClass?'disabled':''}><option value="">${t('Select student','Sélectionner un élève')}</option>${options(list('student').filter(x=>x.data.class===studentClass).sort((a,b)=>a.data.name.localeCompare(b.data.name)).map(x=>[x.id,x.data.name+' · '+x.data.matricule]),studentSelection)}</select></label></div>${isAdmin&&studentSelection?button('Transfer / promote / demote / dismiss','student-move','secondary',`data-id="${studentSelection}"`):''}${studentSelection?table(list('student').filter(x=>x.id===studentSelection&&x.data.class===studentClass),['name','matricule','class','gender','status'],isAdmin):empty(t('Choose a class, then a student to view their record.','Choisissez une classe, puis un élève pour consulter son dossier.'))}`;
  if(tab==='staff')return `${toolbar('profile',button(t('Import staff Excel / CSV','Importer le personnel'),'import','secondary','data-kind="profile"')+button(t('Create login','Créer un accès'),'provision','secondary'))}<p class="notice">${t('Assign HOD and content-creator roles here. To end an HOD appointment, change the role back to teacher. Departments must be confirmed by the principal.','Attribuez les rôles de chef de département et de créateur de contenu ici. Pour terminer un mandat de chef de département, réattribuez le rôle d’enseignant. Le proviseur confirme les départements.')}</p>${table(list('profile'),['name','department','role','officeLabel','matricule'])}<details class="panel"><summary>School post catalogue and current appointments</summary><p>Several people may hold the same post. Only one bursar may be active. Optional support duties apply where the school has those services.</p><div class="table-scroll"><table><thead><tr><th>Post</th><th>French title</th><th>Category</th><th>Active staff</th></tr></thead><tbody>${postCatalogue.filter(p=>!['legacy','family access','app permission'].includes(p.category)).map(p=>`<tr><td>${esc(p.en)}</td><td>${esc(p.fr)}</td><td>${esc(p.category)}</td><td>${list('profile').filter(r=>r.data.role===p.id&&r.data.active!==false).length}${p.maxActive?' / '+p.maxActive:''}</td></tr>`).join('')}</tbody></table></div></details>`;
@@ -139,7 +140,10 @@ function portalContent(){
    ${inv.byCategory.length?barChart(inv.byCategory.map(c=>({key:c.key,value:c.items})),{max:Math.max(...inv.byCategory.map(c=>c.items)),unit:'',label:'Equipment by category'}):''}
   </div>`;
 
-  return head+tiles+documents+inventory+progressionPanel(dept,prog,isHod||!adminOnly);
+  // Progression comes before the paperwork: it is what a head of department
+  // opens this page to look at.
+  return head+calendarBanner()+tiles+progressionViewer(dept,prog,isHod||!adminOnly)
+        +progressionPanel(dept,prog,isHod||!adminOnly)+documents+inventory;
  }
  if(tab==='messages')return messagesPanel();
  if(tab==='analytics'){
@@ -221,10 +225,163 @@ const nameOrSelf=id=>id===profile.id?t('you','vous'):name(id);
 const admin=p=>['principal','vp'].includes(p.role);
 const todayISO=()=>new Date().toISOString().slice(0,10);
 
+// Where the school is today, worked out from the ministry's calendar rather than
+// typed in by anyone. In a holiday it says so: a week that has not started yet
+// cannot already be behind.
+function calendarBanner(year=academicYear()){
+ const c=calendar(knownYear(year)?year:defaultYear);
+ if(!c)return '';
+ const s=schoolWeek(today(),c.year);
+ const dates=w=>{const r=weekRange(w,c.year);return r?`${r.from} → ${r.to}`:'';};
+ const line=s.status==='teaching'
+  ?`<strong>${t('Week','Semaine')} ${s.week} ${t('of','sur')} ${c.weeks}</strong> · ${esc(t(s.term,s.term))} · ${esc(dates(s.week))}`
+  :s.status==='before'
+  ?`<strong>${t('The school year has not opened yet','L’année scolaire n’a pas encore commencé')}</strong> · ${t('teaching begins','la rentrée a lieu le')} ${esc(c.opens)}`
+  :s.status==='holiday'
+  ?`<strong>${t('Holiday','Vacances')}</strong> · ${t('week','semaine')} ${s.lastWeek} ${t('was the last one taught; teaching resumes on','a été la dernière enseignée ; reprise le')} ${esc(s.resumesOn)} (${t('week','semaine')} ${s.nextWeek})`
+  :`<strong>${t('The teaching year is over','L’année d’enseignement est terminée')}</strong> · ${c.weeks} ${t('weeks were taught','semaines enseignées')}`;
+ return `<div class="panel an-head"><div><p class="eyebrow">${t('SCHOOL CALENDAR','CALENDRIER SCOLAIRE')} · ${esc(c.year)}</p>
+  <p>${line}</p>
+  <p class="muted small">${t('Worked out from','Établi à partir de')} ${esc(c.order)}: ${t('the year opens','l’année ouvre le')} ${esc(c.opens)}, ${c.weeks} ${t('working weeks, holidays excluded.','semaines de cours, vacances non comprises.')}</p></div></div>`;
+}
+
+// --- Looking a progression sheet up ------------------------------------------
+// A head of department, or the administration through the department picker,
+// picks a class and a subject and reads the sheet itself — whether or not the
+// department has started ticking lessons off against it.
+let progView={class:'',subject:'',lessons:null,title:'',weeklyPeriods:0,source:'',recordId:''};
+let progCatalogue='idle';
+function ensureCatalogue(){
+ if(progCatalogue!=='idle')return;
+ progCatalogue='loading';
+ api('progression-catalogue')
+  .then(r=>{progSheets=r.sheets;progCatalogue='ready';render();})
+  .catch(err=>{progCatalogue='ready';toast(err.message);});
+}
+// The sheets this department can look at: the ones supplied with the app for its
+// subjects, plus everything it has adopted or imported itself.
+function sheetChoices(dept,records){
+ const out=new Map();
+ const add=(subject,cls,source)=>{const key=subject+'|'+levelOf(cls);if(!out.has(key))out.set(key,{subject,level:levelOf(cls),source});};
+ for(const s of progSheets)if(!s.department||s.department===dept)add(s.subject,s.class,'supplied');
+ for(const r of records)add(r.data.subject,r.data.class,'tracked');
+ return [...out.values()];
+}
+function progressionViewer(dept,records,mayEdit){
+ ensureCatalogue();
+ const choices=sheetChoices(dept,records);
+ const subjects=[...new Set([...choices.map(c=>c.subject),...availableSubjects(rows).filter(s=>s.department===dept).map(s=>s.name)])].sort();
+ const chosenSubject=progView.subject||subjects[0]||'';
+ const chosenClass=progView.class||classes[0]||'';
+ const body=progCatalogue==='loading'&&!progSheets.length
+  ?`<p class="chart-empty">${t('Loading the supplied sheets…','Chargement des fiches fournies…')}</p>`
+  :progView.lessons?sheetReading(records,mayEdit)
+  :`<p class="chart-empty">${t('Choose a class and a subject, then open the sheet.','Choisissez une classe et une matière, puis ouvrez la fiche.')}</p>`;
+ return `<div class="panel"><h3>${t('Progression sheets','Fiches de progression')}</h3>
+  <p class="muted small">${t('The scheme of work for a class, week by week. Supplied sheets and sheets the department has imported are both here.','Le programme d’une classe, semaine par semaine. Les fiches fournies et celles importées par le département figurent ici.')}</p>
+  <div class="form-grid">
+   <label>${t('Class','Classe')}<select id="prog-view-class">${options(classes,chosenClass)}</select></label>
+   <label>${t('Subject','Matière')}<select id="prog-view-subject">${options(subjects.length?subjects:[''],chosenSubject)}</select></label>
+  </div>
+  <div class="actions">${button(t('Open the sheet','Ouvrir la fiche'),'prog-view','primary')}${progView.lessons?button(t('Print','Imprimer'),'print-progression','secondary'):''}</div>
+  ${body}</div>`;
+}
+// The sheet itself. When the department is tracking this class and subject the
+// ticks and the coverage come with it; otherwise it is simply the scheme, read
+// the way it is printed: by term, then by week.
+function sheetReading(records,mayEdit){
+ const rec=records.find(r=>r.id===progView.recordId)||null;
+ const d=rec?.data||{};
+ const week=rec?weekInHand(d,today()):currentWeek(today(),academicYear());
+ const c=coverage(progView.lessons,d.taught||{},{currentWeek:week});
+ const heading=`<div class="row"><div><h4>${esc(progView.subject)} · ${esc(progView.class)}</h4>
+  <p class="muted small">${esc(shorten(progView.title||'',70))}${progView.weeklyPeriods?` · ${progView.weeklyPeriods} ${t('periods a week','périodes par semaine')}`:''} · ${c.total} ${t('lessons','leçons')}
+   · ${progView.source==='tracked'?t('tracked by the department','suivie par le département'):t('supplied with the app','fournie avec l’application')}</p></div>
+  <div class="actions">${rec&&mayEdit?button(t('Mark lessons','Pointer les leçons'),'prog-open','secondary',`data-id="${rec.id}"`):''}
+   ${!rec&&mayEdit?button(t('Track this sheet','Suivre cette fiche'),'prog-add','primary'):''}</div></div>`;
+ const tiles=rec?`<div class="stats an-stats">
+   ${statTile(t('Covered','Couvert'),c.rate,{unit:'%',note:`${c.taught} ${t('of','sur')} ${c.total}`,tone:c.onTrack===null?'':c.onTrack?'good':'poor'})}
+   ${statTile(t('Expected by now','Attendu à ce jour'),c.expected===null?null:c.expected,{note:week?`${t('week','semaine')} ${week}`:t('outside the teaching year','hors année scolaire'),tone:''})}
+   ${statTile(t('Behind','Retard'),c.behind===null?null:c.behind,{note:t('lessons','leçons'),tone:c.behind?'poor':'good'})}
+  </div>`:'';
+ // Grouped the way the printed sheet is, so a head of department can follow it
+ // against the paper copy.
+ const byTerm=new Map();
+ for(const row of c.rows){
+  const term=row.term||termOfWeek(row.week)||t('Unplaced','Non placées');
+  if(!byTerm.has(term))byTerm.set(term,new Map());
+  const weeks=byTerm.get(term),w=row.week===''||row.week===null||row.week===undefined?'—':row.week;
+  if(!weeks.has(w))weeks.set(w,[]);
+  weeks.get(w).push(row);
+ }
+ const table=[...byTerm].map(([term,weeks])=>`<details class="tt-more" open><summary>${esc(term)} · ${[...weeks.values()].reduce((n,l)=>n+l.length,0)} ${t('lessons','leçons')}</summary>
+  <div class="table-scroll"><table><thead><tr><th>${t('Week','Semaine')}</th><th>#</th><th>${t('Lesson','Leçon')}</th><th>${t('Objectives','Objectifs')}</th>${rec?`<th>${t('Taught','Traitée')}</th>`:''}</tr></thead><tbody>
+  ${[...weeks].map(([w,list])=>list.map((row,i)=>`<tr class="${week&&+w===+week?'prog-now':''}">
+    ${i===0?`<td rowspan="${list.length}">${esc(w)}${week&&+w===+week?`<br><small class="ok">${t('this week','cette semaine')}</small>`:''}${(()=>{const r=weekRange(w,knownYear(d.year||academicYear())?(d.year||academicYear()):defaultYear);return r?`<br><small class="muted">${esc(r.from.slice(5))}</small>`:'';})()}</td>`:''}
+    <td>${esc(row.number??'—')}</td>
+    <td>${esc(row.title)}</td>
+    <td>${row.objectives?.length?`<details><summary>${row.objectives.length}</summary><ul>${row.objectives.map(o=>`<li>${esc(o)}</li>`).join('')}</ul></details>`:'—'}</td>
+    ${rec?`<td>${row.taught?`<b class="ok">✓</b> <small class="muted">${esc(row.record?.date||'')}</small>`:'—'}</td>`:''}</tr>`).join('')).join('')}
+  </tbody></table></div></details>`).join('');
+ return heading+tiles+table;
+}
+
+// --- Splitting a subject ------------------------------------------------------
+// A sheet is written for a level: one scheme covers Form 1A and Form 1B. Where
+// the streams are not in step — a different teacher, a class that lost a week —
+// the department splits the subject and follows each class on its own copy.
+function splitFieldset(level,split=false){
+ return `<fieldset class="prog-split"><legend>${t('Which classes does this sheet follow?','Quelles classes suivent cette fiche ?')}</legend>
+  <label class="prog-row"><input type="radio" name="scope" value="level" ${split?'':'checked'}>
+   <span>${t('One scheme for the whole level','Un seul programme pour tout le niveau')} (${esc(levelOf(level)||'—')}) — <span class="muted">${t('every class in the level is counted together','toutes les classes du niveau sont comptées ensemble')}</span></span></label>
+  <label class="prog-row"><input type="radio" name="scope" value="split" ${split?'checked':''}>
+   <span>${t('Split the subject: one scheme per class','Scinder la matière : un programme par classe')} — <span class="muted">${t('for when the classes are not at the same point','lorsque les classes n’en sont pas au même point')}</span></span></label>
+  <div id="prog-split-classes" ${split?'':'hidden'}>${classChoices(level)}</div></fieldset>`;
+}
+function classChoices(level){
+ const inLevel=classesInLevel(level,classes);
+ return inLevel.length
+  ?inLevel.map(c=>`<label class="prog-row"><input type="checkbox" name="classes" value="${esc(c)}" checked><span>${esc(c)}</span></label>`).join('')
+  :`<p class="muted small">${t('No classes are registered for this level yet. Add them in Classes & subjects first.','Aucune classe enregistrée pour ce niveau. Ajoutez-les d’abord dans Classes et matières.')}</p>`;
+}
+// The classes a scheme should be created for: the level itself, or each ticked
+// class when the subject is split.
+function splitTargets(form,level){
+ const data=new FormData(form);
+ if(data.get('scope')!=='split')return [levelOf(level)];
+ const picked=data.getAll('classes');
+ if(!picked.length)throw Error(t('Tick at least one class, or keep one scheme for the whole level.','Cochez au moins une classe, ou gardez un seul programme pour le niveau.'));
+ return picked;
+}
+
+// Fetching the sheet behind a class and a subject: the department's own copy if
+// it has one, otherwise the sheet supplied with the app.
+async function openProgressionSheet(dept,cls,subject){
+ if(!subject)throw Error(t('Choose a subject.','Choisissez une matière.'));
+ const records=list('progression').filter(x=>x.data.department===dept);
+ const level=levelOf(cls);
+ const rec=records.find(r=>r.data.subject===subject&&r.data.class===cls)
+       ||records.find(r=>r.data.subject===subject&&levelOf(r.data.class)===level);
+ if(rec){
+  const d=rec.data;
+  progView={class:cls,subject,lessons:d.lessons||[],title:d.sourceTitle||'',weeklyPeriods:d.weeklyPeriods||0,source:'tracked',recordId:rec.id};
+  return;
+ }
+ const key=subject+'|'+level;
+ if(!progSheetCache[key]){
+  if(!progSheets.some(s=>s.subject===subject&&s.class===level))
+   throw Error(t(`There is no sheet for ${subject} ${level} yet. Import the department's own sheet and it will appear here.`,`Aucune fiche pour ${subject} ${level}. Importez la fiche du département et elle apparaîtra ici.`));
+  const r=await api('progression-sheet',{subject,class:level});
+  progSheetCache[key]=r.sheet;
+ }
+ const sheet=progSheetCache[key];
+ progView={class:cls,subject,lessons:sheet.lessons,title:sheet.title,weeklyPeriods:sheet.weeklyPeriods,source:'supplied',recordId:''};
+}
+
 function progressionPanel(dept,records,mayEdit){
  const rows=records.slice().sort((a,b)=>String(a.data.subject+a.data.class).localeCompare(String(b.data.subject+b.data.class)));
  const cards=rows.map(r=>{
-  const d=r.data,c=coverage(d.lessons||[],d.taught||{},{currentWeek:d.currentWeek||null});
+  const d=r.data,c=coverage(d.lessons||[],d.taught||{},{currentWeek:weekInHand(d,today())});
   const tone=c.onTrack===null?'':c.onTrack?'good':'poor';
   return `<article class="panel prog-card">
    <div class="row"><div><h4>${esc(d.subject)} · ${esc(d.class)}</h4>
@@ -232,7 +389,7 @@ function progressionPanel(dept,records,mayEdit){
     <div class="actions">${mayEdit?button(t('Mark lessons','Pointer les leçons'),'prog-open','secondary',`data-id="${r.id}"`):''}${mayEdit?button(t('Ask the AI','Demander à l’IA'),'prog-advice','secondary',`data-id="${r.id}"`):''}</div></div>
    <div class="stats an-stats">
     ${statTile(t('Covered','Couvert'),c.rate,{unit:'%',note:`${c.taught} ${t('of','sur')} ${c.total}`,tone})}
-    ${statTile(t('Expected by now','Attendu à ce jour'),c.expected===null?null:c.expected,{note:c.currentWeek?`${t('week','semaine')} ${c.currentWeek}`:t('set the current week','indiquez la semaine'),tone:''})}
+    ${statTile(t('Expected by now','Attendu à ce jour'),c.expected===null?null:c.expected,{note:c.currentWeek?`${t('week','semaine')} ${c.currentWeek}`:t('outside the teaching year','hors année scolaire'),tone:''})}
     ${statTile(t('Behind','Retard'),c.behind===null?null:c.behind,{note:t('lessons','leçons'),tone:c.behind?'poor':'good'})}
    </div>
    ${c.byTerm.length?columnChart(c.byTerm.map(x=>({key:x.key.replace(' Term',''),value:x.rate,note:`${x.taught}/${x.total}`})),{label:'Coverage by term'}):''}
@@ -656,11 +813,16 @@ document.addEventListener('click',async e=>{const el=e.target.closest('[data-act
  // --- progression ---
  if(action==='prog-add'){
   if(!progSheets.length){const r=await api('progression-catalogue');progSheets=r.sheets;}
+  if(!progSheets.length)throw Error(t('No sheets are supplied for your subjects. Use Import a sheet instead.','Aucune fiche fournie pour vos matières. Utilisez « Importer une fiche ».'));
+  // If the head of department was reading a sheet, start from that one.
+  const opened=progSheets.findIndex(s=>s.subject===progView.subject&&s.class===levelOf(progView.class));
+  const start=opened<0?0:opened;
   modal(t('Track a progression sheet','Suivre une fiche de progression'),
    `<form id="prog-add-form"><p>${t('These are the national and departmental sheets supplied with the app. If yours is not here, use Import a sheet instead.','Voici les fiches nationales et départementales fournies. Sinon, utilisez « Importer une fiche ».')}</p>
-    <label>${t('Sheet','Fiche')}<select name="sheet" required>${options(progSheets.map((x,i)=>[String(i),`${x.subject} · ${x.class} · ${x.lessons} ${t('lessons','leçons')}`]))}</select></label>
+    <label>${t('Sheet','Fiche')}<select name="sheet" id="prog-add-sheet" required>${options(progSheets.map((x,i)=>[String(i),`${x.subject} · ${x.class} · ${x.lessons} ${t('lessons','leçons')}`]),String(start))}</select></label>
     <label>${t('Academic year','Année scolaire')}<input name="year" value="${esc(academicYear())}" required></label>
-    <label>${t('Current school week','Semaine en cours')}<input type="number" name="currentWeek" min="1" max="40" step="1" value="1"><small>${t('Used to work out whether the subject is behind.','Sert à déterminer si la matière est en retard.')}</small></label>
+    ${splitFieldset(progSheets[start]?.class||'')}
+    <p class="muted small">${t('The school week is worked out from the ministry calendar. You do not have to enter it.','La semaine en cours est déduite du calendrier ministériel. Inutile de la saisir.')}</p>
     <div class="actions"><button class="primary">${t('Start tracking','Commencer le suivi')}</button>${button(t('Cancel','Annuler'),'close','secondary')}</div>
     <p class="error" id="form-error" role="alert"></p></form>`);
  }
@@ -669,10 +831,10 @@ document.addEventListener('click',async e=>{const el=e.target.closest('[data-act
    `<form id="prog-import-form"><p>${t('Upload the progression sheet. A PDF in the national format is read directly — the same format as the Computer Science and ICT sheets already in the app. An Excel or CSV version also works, and needs a heading row with at least a Lesson title column.','Téléversez la fiche de progression. Un PDF au format national est lu directement — le même format que les fiches d’informatique déjà intégrées. Une version Excel ou CSV convient aussi, avec une ligne d’en-tête comportant au moins « Lesson title ».')}</p>
     <div class="form-grid">
      <label>${t('Subject','Matière')}<input name="subject" required value="${esc(profile.department||'')}"></label>
-     <label>${t('Class','Classe')}<select name="class" required>${options(classes)}</select></label>
+     <label>${t('Level the sheet is written for','Niveau visé par la fiche')}<select name="level" id="prog-import-level" required>${options(levels,levelOf(progView.class)||levels[0])}</select></label>
      <label>${t('Academic year','Année scolaire')}<input name="year" value="${esc(academicYear())}" required></label>
-     <label>${t('Current school week','Semaine en cours')}<input type="number" name="currentWeek" min="1" max="40" step="1" value="1"></label>
     </div>
+    ${splitFieldset(levelOf(progView.class)||levels[0])}
     <label class="wide">${t('File','Fichier')}<input type="file" name="file" accept=".pdf,.csv,.xlsx" required><small>${t('The PDF of the sheet itself, or an Excel or CSV version of it.','Le PDF de la fiche, ou une version Excel ou CSV.')}</small></label>
     <div class="actions"><button class="primary">${t('Import','Importer')}</button>${button(t('Cancel','Annuler'),'close','secondary')}</div>
     <p class="error" id="form-error" role="alert"></p></form><div id="prog-import-preview"></div>`);
@@ -680,18 +842,43 @@ document.addEventListener('click',async e=>{const el=e.target.closest('[data-act
  if(action==='prog-import-confirm'){
   if(!progImport)return;
   const p=progImport;
-  await api('save',{kind:'progression',data:{department:profile.department,subject:p.subject,class:p.class,
-   year:p.year,currentWeek:p.currentWeek,sourceTitle:p.sourceTitle,lessons:p.lessons,taught:{}}});
+  let saved=0;
+  try{
+   for(const cls of p.classes){
+    await api('save',{kind:'progression',data:{department:profile.department,subject:p.subject,class:cls,
+     year:p.year,sourceTitle:p.sourceTitle,lessons:p.lessons,taught:{}}});
+    saved++;
+   }
+  }catch(err){await refresh();throw Error(`${saved} ${t('of','sur')} ${p.classes.length} ${t('schemes were created before stopping.','programmes créés avant l’arrêt.')} ${err.message}`);}
   progImport=null;$('#modal').close();await refresh();
-  toast(`${p.lessons.length} ${t('lessons imported.','leçons importées.')}`);
+  toast(`${p.lessons.length} ${t('lessons imported for','leçons importées pour')} ${p.classes.join(', ')}.`);
+ }
+ if(action==='prog-view'){
+  const dept=deptFilter||profile.department||'';
+  const cls=$('#prog-view-class')?.value||progView.class,subject=$('#prog-view-subject')?.value||progView.subject;
+  await openProgressionSheet(dept,cls,subject);
+  render();
+ }
+ if(action==='print-progression'){
+  if(!progView.lessons)return;
+  printView(`<h1>${esc(progView.subject)} · ${esc(progView.class)}</h1>
+   <p>${esc(progView.title||'')}${progView.weeklyPeriods?` · ${progView.weeklyPeriods} periods a week`:''} · ${progView.lessons.length} lessons</p>
+   <table><thead><tr><th>Term</th><th>Week</th><th>#</th><th>Lesson</th></tr></thead><tbody>
+   ${progView.lessons.map(l=>`<tr><td>${esc(l.term||termOfWeek(l.week)||'')}</td><td>${esc(l.week||'')}</td><td>${esc(l.number??'')}</td><td>${esc(l.title)}</td></tr>`).join('')}
+   </tbody></table>`,[]);
  }
  if(action==='prog-open'){
-  const r=byId(id),d=r.data,c=coverage(d.lessons||[],d.taught||{},{currentWeek:d.currentWeek||null});
+  const r=byId(id),d=r.data,week=weekInHand(d,today()),auto=currentWeek(today(),d.year);
+  const c=coverage(d.lessons||[],d.taught||{},{currentWeek:week});
   const byWeek=new Map();
   for(const row of c.rows){const w=row.week||'—';if(!byWeek.has(w))byWeek.set(w,[]);byWeek.get(w).push(row);}
   modal(`${d.subject} · ${d.class}`,
    `<form id="prog-mark-form" data-id="${r.id}" data-version="${r.version}">
-    <label>${t('Current school week','Semaine en cours')}<input type="number" name="currentWeek" min="1" max="40" step="1" value="${esc(d.currentWeek||'')}"></label>
+    <p class="muted small">${auto
+      ?`${t('Measured against week','Mesuré par rapport à la semaine')} <b>${week}</b>${week!==auto?` (${t('entered by hand; the calendar says','saisie manuelle ; le calendrier indique')} ${auto})`:` — ${t('worked out from the ministry calendar','déduit du calendrier ministériel')}`}.`
+      :t('The ministry calendar has no dates for that academic year, so the week below is used.','Le calendrier ministériel ne couvre pas cette année scolaire ; la semaine ci-dessous est utilisée.')}</p>
+    <details class="tt-more"${auto?'':' open'}><summary>${t('Measure against a different week','Mesurer par rapport à une autre semaine')}</summary>
+     <label>${t('Week','Semaine')}<input type="number" name="weekOverride" min="1" max="40" step="1" value="${esc(d.weekOverride||'')}"><small>${t('Leave it empty to follow the calendar.','Laissez vide pour suivre le calendrier.')}</small></label></details>
     <p class="muted small">${t('Tick a lesson once it has been taught. The date is recorded with it.','Cochez une leçon une fois traitée. La date est enregistrée.')}</p>
     <div class="prog-list">${[...byWeek].map(([w,rowsIn])=>`<fieldset><legend>${t('Week','Semaine')} ${esc(w)} · ${esc(termOfWeek(w)||'')}</legend>
       ${rowsIn.map(row=>`<label class="prog-row"><input type="checkbox" name="lesson" value="${esc(row.key)}" ${row.taught?'checked':''}>
@@ -702,7 +889,7 @@ document.addEventListener('click',async e=>{const el=e.target.closest('[data-act
  }
  if(action==='prog-advice'){
   const r=byId(id),d=r.data;
-  const c=coverage(d.lessons||[],d.taught||{},{currentWeek:d.currentWeek||null});
+  const c=coverage(d.lessons||[],d.taught||{},{currentWeek:weekInHand(d,today())});
   modal(t('Asking the AI…','Demande à l’IA…'),`<p class="chart-empty">${t('Reading the coverage figures…','Lecture des chiffres de couverture…')}</p>`);
   try{
    const a=await api('ai',{prompt:coveragePrompt(c,{subject:d.subject,cls:d.class,year:d.year}),language:lang,style:''});
@@ -753,7 +940,24 @@ document.addEventListener('click',async e=>{const el=e.target.closest('[data-act
  if(action==='issue-batch'){el.disabled=true;const issued=[];try{for(const d of bulkDraft){const a=await api('save',{kind:'document',data:d});issued.push(a.row);}await refresh();printView((await Promise.all(issued.map(x=>documentHTML(x.data)))).join(''),issued.map(x=>x.data));}catch(err){await refresh();throw Error(`${issued.length} documents issued before stopping. View the register before retrying. ${err.message}`);}}
  }catch(err){toast(err.message);}});
 let bulkDraft=[];
-document.addEventListener('change',async e=>{if(e.target.id==='dept-pick'){deptFilter=e.target.value;render();return;}
+document.addEventListener('change',async e=>{if(e.target.id==='dept-pick'){deptFilter=e.target.value;progView={class:'',subject:'',lessons:null,title:'',weeklyPeriods:0,source:'',recordId:''};render();return;}
+ // The progression viewer: changing either choice puts the open sheet away, so
+ // what is on screen always matches the two selects above it.
+ if(e.target.id==='prog-view-class'||e.target.id==='prog-view-subject'){
+  progView={class:$('#prog-view-class').value,subject:$('#prog-view-subject').value,lessons:null,title:'',weeklyPeriods:0,source:'',recordId:''};
+  render();return;
+ }
+ // Splitting a subject: the class list follows the sheet's level, and is shown
+ // only when the department has actually asked to split.
+ if(e.target.id==='prog-add-sheet'||e.target.id==='prog-import-level'){
+  const level=e.target.id==='prog-add-sheet'?(progSheets[Number(e.target.value)]?.class||''):e.target.value;
+  const box=$('#prog-split-classes');
+  if(box)box.innerHTML=classChoices(level);
+  const label=e.target.form?.querySelector('.prog-split .prog-row span');
+  if(label)label.innerHTML=label.innerHTML.replace(/\(([^)]*)\)/,`(${esc(levelOf(level)||'—')})`);
+  return;
+ }
+ if(e.target.name==='scope'&&$('#prog-split-classes')){$('#prog-split-classes').hidden=e.target.value!=='split';return;}
  if(e.target.id==='tt-class'){ttClass=e.target.value;render();return;}
  if(e.target.id==='tt-teacher'){ttTeacher=e.target.value;render();return;}
  if(e.target.id==='login-mode'){const student=e.target.value==='student';$('#staff-fields').hidden=student;$('#student-fields').hidden=!student;$('#staff-fields').querySelectorAll('input').forEach(x=>x.required=!student);$('#student-fields').querySelectorAll('input').forEach(x=>x.required=student);}
@@ -806,10 +1010,17 @@ document.addEventListener('submit',async e=>{e.preventDefault();const form=e.tar
   const key=chosen.subject+'|'+chosen.class;
   if(!progSheetCache[key]){const r=await api('progression-sheet',{subject:chosen.subject,class:chosen.class});progSheetCache[key]=r.sheet;}
   const sheet=progSheetCache[key];
-  await api('save',{kind:'progression',data:{department:profile.department,subject:chosen.subject,class:data.class||chosen.class,
-   year:data.year,currentWeek:Number(data.currentWeek)||null,sourceTitle:sheet.title,weeklyPeriods:sheet.weeklyPeriods,
-   lessons:sheet.lessons,taught:{}}});
-  $('#modal').close();await refresh();toast(t('Now tracking that scheme.','Suivi du programme activé.'));
+  const targets=splitTargets(form,chosen.class);
+  let saved=0;
+  try{
+   for(const cls of targets){
+    await api('save',{kind:'progression',data:{department:profile.department,subject:chosen.subject,class:cls,
+     year:data.year,sourceTitle:sheet.title,weeklyPeriods:sheet.weeklyPeriods,lessons:sheet.lessons,taught:{}}});
+    saved++;
+   }
+  }catch(err){await refresh();throw Error(`${saved} ${t('of','sur')} ${targets.length} ${t('schemes were created before stopping.','programmes créés avant l’arrêt.')} ${err.message}`);}
+  $('#modal').close();await refresh();
+  toast(targets.length>1?`${targets.length} ${t('schemes are now tracked, one per class.','programmes suivis, un par classe.')}`:t('Now tracking that scheme.','Suivi du programme activé.'));
   return;
  }
  if(form.id==='prog-import-form'){
@@ -819,7 +1030,8 @@ document.addEventListener('submit',async e=>{e.preventDefault();const form=e.tar
   // Nothing is saved until the head of department has seen what was read. A
   // progression sheet is a record, and importing the wrong thing silently would
   // be worse than not importing at all.
-  progImport={lessons,sourceTitle,subject:data.subject,class:data.class,year:data.year,currentWeek:Number(data.currentWeek)||null};
+  progImport={lessons,sourceTitle,subject:data.subject,level:levelOf(data.level),
+              classes:splitTargets(form,data.level),year:data.year};
   const d=describeImport(lessons);
   $('#prog-import-preview').innerHTML=`<h3>${t('What was read','Ce qui a été lu')}</h3>
    <div class="stats an-stats">
@@ -844,7 +1056,7 @@ document.addEventListener('submit',async e=>{e.preventDefault();const form=e.tar
    if(ticked.has(k)){if(!taught[k])taught[k]={date:todayISO(),by:profile.id};}
    else delete taught[k];
   });
-  await api('save',{kind:'progression',id:r.id,version:r.version,data:{...d,taught,currentWeek:Number(data.currentWeek)||null}});
+  await api('save',{kind:'progression',id:r.id,version:r.version,data:{...d,taught,weekOverride:Number(data.weekOverride)||null}});
   $('#modal').close();await refresh();toast(t('Coverage updated.','Couverture mise à jour.'));
   return;
  }

@@ -131,9 +131,21 @@ Messages are a running thread per department plus direct notes between colleague
 
 These rules sit in `src/access.js` *above* the principal's blanket read and write, which is the only reason they hold. A principal who is also given a department can read that department's records and no other.
 
+### The school calendar
+
+The school year is fixed by joint order of MINEDUB and MINESEC. `src/calendar.js` holds the 2026/2027 year as Joint Order N° 002/26/JO/MINEDUB/MINESEC of 14 August 2026 sets it out: the year opens on Monday 7 September 2026 and is taught in five blocks with the Christmas and Easter holidays between them.
+
+The blocks are what makes this worth a module rather than a subtraction. Counting the days since September and dividing by seven treats the three weeks of Christmas holiday as teaching weeks, which puts every subject three weeks further behind than it is. The week numbers are counted from the printed dates rather than typed in, and they come to the 36 working weeks Article 8 of the order requires — twelve to a term, which is exactly what the progression sheets assume when they file lessons under weeks 1 to 12, 13 to 24 and 25 onwards.
+
+So nobody types the current week in any more. The department page states where the school is — the week, its term and its dates, or that it is a holiday and when teaching resumes — and every coverage figure is measured against it. During a holiday the last week taught is used, not the week the school is about to return to: a week that has not started cannot already be behind. A week can still be entered by hand, in the mark-lessons dialog, for a department deliberately reviewing an earlier week or an academic year the calendar does not carry; the dialog says which of the two is in force.
+
 ### Progression and coverage
 
-Nine progression sheets ship with the app — Computer Science Forms 1 to 5 and Lower and Upper Sixth, and ICT Lower and Upper Sixth — read out of the 2026-2027 national and departmental PDFs into `api/data/progression.json`, 901 lessons in total. They are produced by the same parser the import uses, so the bundled sheets and an imported one are read identically. A department adopts a sheet, records which school week it is in, and ticks lessons as they are taught. Coverage is then measured against the sheet rather than against the timetable: a lesson counts when somebody marks it taught.
+Nine progression sheets ship with the app — Computer Science Forms 1 to 5 and Lower and Upper Sixth, and ICT Lower and Upper Sixth — read out of the 2026-2027 national and departmental PDFs into `api/data/progression.json`, 901 lessons in total. They are produced by the same parser the import uses, so the bundled sheets and an imported one are read identically. A department adopts a sheet and ticks lessons as they are taught. Coverage is then measured against the sheet rather than against the timetable: a lesson counts when somebody marks it taught.
+
+**Reading a sheet.** The department page has a viewer: pick a class and a subject and the scheme opens, term by term and week by week, with each lesson's number, title and objectives. It does not require the department to be tracking that sheet — a supplied sheet can be read before it is adopted — and the week the school is in is marked in the table. Where the department *is* tracking it, the ticks and the coverage figures come with it. The administration reaches the same viewer through the department picker, so the principal can read any department's scheme of work without being able to tick anything in it.
+
+**Split subjects.** A progression sheet is written for a level: one sheet covers Form 1A and Form 1B alike. A department that wants its streams counted together tracks one scheme for the level, which is the default. A department whose classes are not at the same point — a different teacher, a class that lost a week — splits the subject instead and gets one scheme per class, each with its own ticks and its own coverage. The choice is made when a sheet is adopted or imported, and it is the same control in both places.
 
 Terms follow the week, as every supplied sheet does: weeks 1 to 12, 13 to 24, and 25 onwards. The module column of the source PDFs is printed vertically and interleaves with its neighbours when extracted, so a module label is kept only where it still reads as words and lessons are grouped by term and week instead.
 

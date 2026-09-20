@@ -145,7 +145,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   if(!staff(p))fail('Staff access required.',403);
   // Only the headings travel: the full lesson list for one sheet is fetched when
   // a department actually adopts it, and 785 lessons should not ride on every load.
-  return res.json({sheets:progressionSheets.map(s=>({subject:s.subject,class:s.class,title:s.title,weeklyPeriods:s.weeklyPeriods,lessons:s.lessons.length}))});
+  return res.json({sheets:progressionSheets.map(s=>({subject:s.subject,class:s.class,department:s.department||'',title:s.title,weeklyPeriods:s.weeklyPeriods,lessons:s.lessons.length}))});
  }
  if(op==='progression-sheet'){
   if(!staff(p))fail('Staff access required.',403);

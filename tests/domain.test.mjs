@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizeMatricule,slotsFor,generateTimetable,promotionEligible,reportSummary,attestationText,validateRecord} from '../src/domain.js';
+import {normalizeMatricule,levels,levelOf,classesInLevel,classes,slotsFor,generateTimetable,promotionEligible,reportSummary,attestationText,validateRecord} from '../src/domain.js';
 import {canRead,canWrite} from '../src/access.js';
 test('matricules preserve leading zero and letters; no digit guessing',()=>{assert.equal(normalizeMatricule(' 059 1733-y '),'0591733Y');assert.equal(normalizeMatricule('I097911'),'I097911');});
 test('period boundaries honour break, closing and Wednesday',()=>{const normal=slotsFor('Form 1A','Monday');assert.equal(normal.length,8);assert.equal(normal.at(-1).end,880);assert.equal(slotsFor('Lower Sixth Arts','Monday').at(-1).end,930);assert.equal(slotsFor('Upper Sixth Science','Wednesday').at(-1).end,780);assert.throws(()=>slotsFor('Form 5A','Monday'));for(const s of normal)assert.ok(s.end<=650||s.start>=680);});
@@ -15,3 +15,19 @@ test('HOD cannot review another department',()=>{const hod={id:'h',role:'hod',de
 test('student cannot read pending notes or a non-enrolled subject',()=>{const s={id:'s',role:'student',class:'Form 1A',subjects:['Math']};assert.equal(canRead(s,{kind:'resource',data:{class:'Form 1A',subject:'English',status:'published'}},[]),false);assert.equal(canRead(s,{kind:'resource',data:{class:'Form 1A',subject:'Math',status:'pending'}},[]),false);assert.equal(canRead(s,{kind:'resource',data:{class:'Form 1A',subject:'Math',status:'published'}},[]),true);});
 test('parent access is restricted to linked student and published results',()=>{const parent={id:'p',role:'parent',children:['s1']};assert.equal(canRead(parent,{kind:'attendance',data:{studentId:'s2'}},[]),false);assert.equal(canRead(parent,{kind:'attendance',data:{studentId:'s1'}},[]),true);assert.equal(canRead(parent,{kind:'mark',data:{studentId:'s1',status:'draft'}},[]),false);});
 test('VP cannot issue attestations or appoint staff',()=>{const vp={id:'v',role:'vp'};assert.equal(canWrite(vp,'document',{},null,[]),false);assert.equal(canWrite(vp,'profile',{},null,[]),false);assert.equal(canWrite(vp,'assignment',{},null,[]),true);});
+test('a class belongs to the level its progression sheet is written for',()=>{
+ assert.equal(levelOf('Form 1A'),'Form 1');
+ assert.equal(levelOf('Form 5B'),'Form 5');
+ assert.equal(levelOf('Lower Sixth Arts'),'Lower Sixth');
+ assert.equal(levelOf('Upper Sixth Science'),'Upper Sixth');
+ assert.equal(levelOf('Form 3'),'Form 3','a level is already a level');
+ assert.equal(levelOf(''),'');
+ assert.equal(levelOf(null),'');
+ // Every registered class must land on one of the levels the sheets are written
+ // for, or a split subject would have nowhere to file its scheme.
+ for(const c of classes)assert.ok(levels.includes(levelOf(c)),`${c} has no level`);
+ assert.deepEqual(classesInLevel('Form 1'),['Form 1A','Form 1B']);
+ assert.deepEqual(classesInLevel('Form 1A'),['Form 1A','Form 1B'],'a class names its own level');
+ assert.deepEqual(classesInLevel('Lower Sixth'),['Lower Sixth Arts','Lower Sixth Science']);
+ assert.deepEqual(classesInLevel('Form 6'),[]);
+});
