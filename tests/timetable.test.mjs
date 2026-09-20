@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {generateTimetable,lessonBlocks,teacherWeekCost,compactTeacherWeeks,timetableRow,timetableFor,timetableDays,timetablePeriods,slotsFor,subjectCode,classes} from '../src/domain.js';
+import {generateTimetable,lessonBlocks,teacherWeekCost,compactTeacherWeeks,timetableRow,timetableFor,timetableDays,timetablePeriods,slotsFor,subjectCode,classes,buildJobs} from '../src/domain.js';
 
 const FORM5_END=880;
 const capacity=cls=>timetableDays.reduce((n,d)=>n+slotsFor(cls,d,FORM5_END).length,0);
@@ -340,4 +340,170 @@ test('preferences do not cost the grouping they were added to protect',()=>{
  const avgDays=ids.reduce((n,id)=>n+teacherWeekCost(entries,id).days,0)/ids.length;
  assert.deepEqual(conflicts(entries,load),[]);
  assert.ok(avgDays<4.3,`average ${avgDays.toFixed(2)} days per teacher with default preferences`);
+});
+
+// ---------------------------------------------------------------------------
+// Groups: subjects that run at the same time, and classes taught together
+// ---------------------------------------------------------------------------
+// The school's own example: Form 5A periods 3 and 4 are Commerce and Geography at
+// once — the Commerce students go to one hall, the Geography students to another —
+// and where it can be done the same lesson is taught to Form 5B at the same time.
+
+// The ordinary conflict checker counts a class or a teacher in two places as an
+// error. Inside a group that is exactly what is meant to happen, so entries placed
+// as one unit are collapsed before checking: one class slot, one teacher, one room.
+function groupConflicts(entries){
+ const bad=[];
+ const byDay=new Map();
+ for(const e of entries){if(!byDay.has(e.day))byDay.set(e.day,[]);byDay.get(e.day).push(e);}
+ for(const [day,list] of byDay)for(let i=0;i<list.length;i++)for(let j=i+1;j<list.length;j++){
+  const a=list[i],b=list[j];
+  if(!(a.start<b.end&&b.start<a.end))continue;
+  const sameUnit=a.unit&&a.unit===b.unit;
+  if(a.class===b.class&&!sameUnit)bad.push(`${a.class} double-booked ${day} ${a.subject}/${b.subject}`);
+  if(a.teacherId===b.teacherId&&!sameUnit)bad.push(`${a.teacherId} double-booked ${day}`);
+ }
+ for(const e of entries){
+  const slots=slotsFor(e.class,e.day,FORM5_END);
+  if(!slots.some(s=>s.start===e.start&&s.end===e.end))bad.push(`${e.class} ${e.day} lesson outside the school day`);
+ }
+ return bad;
+}
+const periodsOf=(entries,cls,subject)=>entries.filter(e=>e.class===cls&&e.subject===subject).length;
+const filler=(cls,teacher='FILL')=>[{class:cls,subject:'English Language',teacherId:teacher+'-E',department:'English',periods:5},
+                                    {class:cls,subject:'Mathematics',teacherId:teacher+'-M',department:'Mathematics',periods:5}];
+
+test('two subjects in an option block take the same periods, and the class is busy once',()=>{
+ const load=[...filler('Form 5A'),
+  {class:'Form 5A',subject:'Commerce',teacherId:'COM',department:'Economics',periods:4},
+  {class:'Form 5A',subject:'Geography',teacherId:'GEO',department:'Geography',periods:4}];
+ const entries=generateTimetable(load,FORM5_END,['Form 5A'],{preferences:{form5End:FORM5_END,
+  groups:[{name:'Form 5 options',classes:['Form 5A'],subjects:['Commerce','Geography'],mode:'parallel',merge:false}]}});
+ assert.deepEqual(groupConflicts(entries),[]);
+ assert.equal(periodsOf(entries,'Form 5A','Commerce'),4);
+ assert.equal(periodsOf(entries,'Form 5A','Geography'),4);
+ // Every Commerce period has Geography beside it, and the reverse.
+ const slot=e=>e.day+'\u0001'+e.start;
+ const com=new Set(entries.filter(e=>e.subject==='Commerce').map(slot));
+ const geo=new Set(entries.filter(e=>e.subject==='Geography').map(slot));
+ assert.deepEqual([...com].sort(),[...geo].sort(),'the option subjects do not line up');
+ // The two together take four periods of the class week, not eight.
+ const taken=new Set(entries.filter(e=>e.class==='Form 5A').map(slot));
+ assert.equal(taken.size,4+5+5,'the option block should occupy the class slot once');
+});
+
+test('classes taught together sit the same lesson at the same time',()=>{
+ const load=[...filler('Form 5A','A'),...filler('Form 5B','B'),
+  {class:'Form 5A',subject:'Commerce',teacherId:'COM',department:'Economics',periods:4},
+  {class:'Form 5B',subject:'Commerce',teacherId:'COM',department:'Economics',periods:4}];
+ const entries=generateTimetable(load,FORM5_END,['Form 5A','Form 5B'],{preferences:{form5End:FORM5_END,
+  groups:[{name:'Form 5 Commerce',classes:['Form 5A','Form 5B'],subjects:['Commerce'],mode:'apart',merge:true}]}});
+ assert.deepEqual(groupConflicts(entries),[]);
+ const slot=e=>e.day+'\u0001'+e.start;
+ const a=entries.filter(e=>e.class==='Form 5A'&&e.subject==='Commerce').map(slot).sort();
+ const b=entries.filter(e=>e.class==='Form 5B'&&e.subject==='Commerce').map(slot).sort();
+ assert.equal(a.length,4);
+ assert.deepEqual(a,b,'both classes must sit the lesson at the same time');
+ // The teacher stands in front of one room for four periods, not eight.
+ const {entries:sheet,total}=timetableFor(entries,{teacherId:'COM'});
+ assert.equal(total,4,'the teacher sheet should show one lesson, not one per class');
+ assert.ok(sheet.every(e=>/5A \+ 5B/.test(e.class)),'the sheet should name both classes on one row');
+ assert.ok(teacherWeekCost(entries,'COM').gaps>=0,'a combined lesson must not read as a negative gap');
+});
+
+test('an option block merged across two classes does both at once',()=>{
+ const load=[...filler('Form 5A','A'),...filler('Form 5B','B'),
+  {class:'Form 5A',subject:'Commerce',teacherId:'COM',department:'Economics',periods:4},
+  {class:'Form 5B',subject:'Commerce',teacherId:'COM',department:'Economics',periods:4},
+  {class:'Form 5A',subject:'Geography',teacherId:'GEO',department:'Geography',periods:4},
+  {class:'Form 5B',subject:'Geography',teacherId:'GEO',department:'Geography',periods:4}];
+ const entries=generateTimetable(load,FORM5_END,['Form 5A','Form 5B'],{preferences:{form5End:FORM5_END,
+  groups:[{name:'Form 5 options',classes:['Form 5A','Form 5B'],subjects:['Commerce','Geography'],mode:'parallel',merge:true}]}});
+ assert.deepEqual(groupConflicts(entries),[]);
+ const slot=e=>e.day+'\u0001'+e.start;
+ const want=new Set(entries.filter(e=>e.class==='Form 5A'&&e.subject==='Commerce').map(slot));
+ assert.equal(want.size,4);
+ for(const cls of ['Form 5A','Form 5B'])for(const s of ['Commerce','Geography'])
+  assert.deepEqual(new Set(entries.filter(e=>e.class===cls&&e.subject===s).map(slot)),want,`${cls} ${s} is out of step`);
+ assert.equal(timetableFor(entries,{teacherId:'COM'}).total,4);
+ assert.equal(timetableFor(entries,{teacherId:'GEO'}).total,4);
+});
+
+test('a group that cannot be taught as one lesson says why',()=>{
+ const two=[{class:'Form 5A',subject:'Commerce',teacherId:'X',department:'Economics',periods:4},
+            {class:'Form 5B',subject:'Commerce',teacherId:'Y',department:'Economics',periods:4}];
+ const g=extra=>({form5End:FORM5_END,groups:[{name:'Form 5 Commerce',classes:['Form 5A','Form 5B'],subjects:['Commerce'],mode:'apart',merge:true,...extra}]});
+ assert.throws(()=>generateTimetable(two,FORM5_END,['Form 5A','Form 5B'],{preferences:g()}),
+  /assigned to more than one teacher/);
+ const uneven=[{...two[0],teacherId:'X'},{...two[1],teacherId:'X',periods:3}];
+ assert.throws(()=>generateTimetable(uneven,FORM5_END,['Form 5A','Form 5B'],{preferences:g()}),
+  /same number of periods/);
+ // Options must be the same size: a student cannot be in two halls for the odd period.
+ const odd=[{class:'Form 5A',subject:'Commerce',teacherId:'X',department:'Economics',periods:4},
+            {class:'Form 5A',subject:'Geography',teacherId:'Y',department:'Geography',periods:3}];
+ assert.throws(()=>generateTimetable(odd,FORM5_END,['Form 5A'],{preferences:{form5End:FORM5_END,
+  groups:[{name:'Options',classes:['Form 5A'],subjects:['Commerce','Geography'],mode:'parallel',merge:false}]}}),
+  /same number of periods/);
+});
+
+test('a subject can be capped for the week on its own',()=>{
+ const load=[{class:'Form 1A',subject:'Mathematics',teacherId:'M',department:'Mathematics',periods:6}];
+ assert.throws(()=>generateTimetable(load,FORM5_END,['Form 1A'],
+  {preferences:{form5End:FORM5_END,subjects:{Mathematics:{maxPerWeek:4}}}}),
+  /above the limit of 4/);
+ // The school-wide cap still applies to a subject with no cap of its own.
+ assert.throws(()=>generateTimetable(load,FORM5_END,['Form 1A'],
+  {preferences:{form5End:FORM5_END,maxSubjectPerWeek:5}}),/above the limit of 5/);
+ assert.ok(generateTimetable(load,FORM5_END,['Form 1A'],
+  {preferences:{form5End:FORM5_END,subjects:{Mathematics:{maxPerWeek:8}},maxSubjectPerWeek:6}}).length===6,
+  'a subject may be allowed more than the school-wide default');
+});
+
+test('subjects asked to share a day do so without breaking any rule',()=>{
+ const load=[...filler('Form 1A'),
+  {class:'Form 1A',subject:'Physics',teacherId:'PHY',department:'Physics',periods:2},
+  {class:'Form 1A',subject:'Chemistry',teacherId:'CHE',department:'Chemistry',periods:2}];
+ const prefs={form5End:FORM5_END,groups:[{name:'Science day',classes:['Form 1A'],subjects:['Physics','Chemistry'],mode:'sameDay',merge:false}]};
+ const entries=generateTimetable(load,FORM5_END,['Form 1A'],{preferences:prefs});
+ assert.deepEqual(groupConflicts(entries),[]);
+ const days=new Set(entries.filter(e=>['Physics','Chemistry'].includes(e.subject)).map(e=>e.day));
+ assert.ok(days.size<=2,`the two sciences are spread over ${days.size} days`);
+ // Still two separate lessons: nothing was merged behind the school's back.
+ assert.equal(periodsOf(entries,'Form 1A','Physics'),2);
+ assert.equal(periodsOf(entries,'Form 1A','Chemistry'),2);
+});
+
+test('a group is dropped, not obeyed blindly, when it names things that are gone',()=>{
+ const p=normalizePreferences({groups:[
+  {name:'Stale',classes:['Form 9Z'],subjects:['Commerce'],mode:'parallel'},
+  {name:'Thin',classes:['Form 5A'],subjects:['Commerce'],mode:'parallel',merge:false},
+  {name:'Real',classes:['Form 5A','Form 5B'],subjects:['Commerce','Geography'],mode:'parallel',merge:true}]},
+  {subjectNames:['Commerce','Geography']});
+ assert.deepEqual(p.groups.map(g=>g.name),['Real'],'only the group that can do something survives');
+ assert.deepEqual(p.groups[0].classes,['Form 5A','Form 5B']);
+ assert.equal(p.groups[0].merge,true);
+ // A group with one subject is still a group when its job is to combine classes.
+ const merged=normalizePreferences({groups:[{name:'Joint',classes:['Form 5A','Form 5B'],subjects:['Commerce'],mode:'apart',merge:true}]});
+ assert.equal(merged.groups.length,1);
+});
+
+test('the whole school still solves with option blocks in every Form 5',()=>{
+ const load=schoolLoad();
+ // Replace the Form 5 Geography and Economics lines with an option block taught to
+ // both streams at once, which is the arrangement the school described.
+ const groups=[{name:'Form 5 options',classes:['Form 5A','Form 5B'],subjects:['Geography','Economics'],mode:'parallel',merge:true}];
+ for(const cls of ['Form 5A','Form 5B'])for(const s of ['Geography','Economics']){
+  const line=load.find(a=>a.class===cls&&a.subject===s);
+  line.periods=2;line.teacherId=s.slice(0,4).toUpperCase()+'-1';
+ }
+ const entries=generateTimetable(load,FORM5_END,classes,{preferences:{form5End:FORM5_END,groups},deadlineMs:25000});
+ assert.deepEqual(groupConflicts(entries),[]);
+ const slot=e=>e.day+'\u0001'+e.start;
+ const base=new Set(entries.filter(e=>e.class==='Form 5A'&&e.subject==='Geography').map(slot));
+ assert.equal(base.size,2);
+ for(const cls of ['Form 5A','Form 5B'])for(const s of ['Geography','Economics'])
+  assert.deepEqual(new Set(entries.filter(e=>e.class===cls&&e.subject===s).map(slot)),base,`${cls} ${s} broke the block`);
+ // Every other class is untouched and still complete.
+ for(const a of load.filter(x=>!['Form 5A','Form 5B'].includes(x.class)))
+  assert.equal(periodsOf(entries,a.class,a.subject),a.periods,`${a.class} ${a.subject}`);
 });

@@ -113,6 +113,26 @@ Before generating, the principal or VP sets the rules in one **Timetable prefere
 
 Some of these interact, and the generator resolves them rather than producing something contradictory. A subject set to *Singles only* is capped at one period a day, since two singles placed back to back would be a double in all but name; a daily limit of 1 likewise forces that subject into single periods. A morning preference never costs a teacher an extra day — fewer days remains the stronger goal.
 
+Each subject can also carry its own weekly ceiling beside its daily one, which is checked against the register before anything is placed: a subject given more periods than its ceiling stops the generation and names the class and the two numbers, rather than producing a timetable built on a typing mistake.
+
+The teacher table prints each teacher's week as it currently stands — days in school and free periods between their lessons — next to the boxes that shape it. A teacher who comes in five days for eleven periods is visible on the same row as the *Max days* box that fixes it.
+
+#### Groups: subjects at the same time, classes taught together
+
+A school's timetable is not only one class, one subject, one teacher. Two things happen constantly in Forms 4 and 5 and in the Sixth Form, and a group does either or both.
+
+**Subjects running at the same time.** Form 5A periods 3 and 4 are Commerce *and* Geography: the Commerce students go to one hall, the Geography students to another, and the class is occupied either way. On the sheet the cell splits and carries both lessons with their own teachers. The generator treats the pair as one placement, so it can never drift apart, and the class's week is charged for the period once rather than twice.
+
+**Classes taught together.** Form 5A and Form 5B sit the same Commerce lesson, one teacher, one room, at the same period in both their weeks. The teacher's own sheet shows it as one lesson naming both classes rather than as two lessons stacked on top of each other, and their weekly total counts it once — a teacher standing in front of a combined class is not teaching two periods at once.
+
+The two combine, which is the arrangement the school asked for: Commerce and Geography run in the same periods, and each of them is taught to Form 5A and Form 5B together. That is one placement carrying two lessons and filling two classes' weeks — four rows on the printed sheets, one lesson in the school.
+
+A group can also simply pull its subjects onto the same day where the week allows it, which is a preference rather than a rule and never costs a teacher an extra day.
+
+What a group cannot paper over is stated plainly rather than guessed at. Subjects running at the same time must have the same number of periods a week — a student cannot be in two halls for the odd period — and classes taught together must share one teacher and the same number of periods. Where the register says otherwise the generation stops and names the subject, the classes and the numbers, so the assignment can be corrected. Groups that name a class or a subject the school no longer has lose that entry rather than blocking the timetable.
+
+The polish pass that tightens each teacher's week leaves grouped lessons where the solver put them: moving half an option block, or one class out of a combined lesson, would break the arrangement the school asked for.
+
 The generator places whole blocks rather than single periods: each assignment is split into doubles, with one single left over when the weekly count is odd. Beyond avoiding clashes it works to a teacher's week — it pulls each teacher's lessons onto as few days as possible and groups them so they run on from one another instead of leaving free periods in between. On a full 14-class load this produced an average of 3.7 days in school per teacher against 4.9 before, with 2 of 30 teachers on a five-day week instead of 28.
 
 The hard rules are never traded for that: no class and no teacher is ever in two places at once, a class never meets the same subject twice in a day beyond one double, and no double is split across the break. The result is either a complete timetable or a refusal — a partial timetable is never saved. If the preferences cannot be met, the error names the cause and the numbers — which class or teacher, how many periods were asked for and how many the week leaves room for — so the register or the limits can be corrected. Nothing partial is ever saved, and the existing timetable stays in place until a new one succeeds.

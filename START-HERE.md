@@ -2,7 +2,29 @@
 
 No terminal commands are needed.
 
-## This update: finding a progression sheet, and the real school calendar
+## This update: timetable groups
+
+**Two subjects can now run in the same period.** Form 5A periods 3 and 4 as Commerce *and* Geography, the Commerce students in one hall and the Geography students in another — the arrangement you described. Both appear in the same box on the class sheet with their own teachers, and the generator keeps them together: they can never drift onto different periods.
+
+**Two classes can now sit one lesson.** Tick *Teach the chosen classes together as one lesson* and Form 5A and Form 5B take that Commerce period in the same room with one teacher. The teacher's own sheet shows it once, naming both classes, and their weekly total counts it once — not twice.
+
+**The two combine**, which is what you asked for: Commerce and Geography in the same periods, each taught to Form 5A and Form 5B together.
+
+To set one up, open **Timetable → Timetable preferences → Groups**, press *Add a group*, then:
+
+1. Name it, for example *Form 5 options*.
+2. Choose the classes — Form 5A and Form 5B.
+3. Choose the subjects — Commerce and Geography.
+4. *How the subjects run*: **At the same time** for an option block, or **On the same day** if you only want them near each other.
+5. Tick **Teach the chosen classes together** if the two classes share the lesson.
+
+Two things the app will refuse, and say so: subjects running at the same time must have the same number of periods a week, and classes taught together must have the same teacher and the same number of periods. If the register says otherwise, the message names the subject, the classes and the numbers so you know which assignment to change.
+
+**Each subject can have its own weekly maximum.** *Per subject* now has a *Max a week* box beside *Max a day*. It is checked before anything is placed, so a mistyped assignment is caught by name instead of producing a timetable built on it.
+
+**You can see which teachers are scattered.** *Per teacher* now shows each teacher's week as it stands — days in school, and free periods sitting between their lessons — right next to their *Max days* box. If a teacher comes in five days for eleven periods, put 3 or 4 in that box and generate again. On the school's own load this brings the average down to 3.6 days with nobody above four, at the cost of a few more free periods.
+
+## Previous update: finding a progression sheet, and the real school calendar
 
 **You can now open a progression sheet from your department page.** Under **My department** there is a *Progression sheets* panel at the top: choose a class and a subject, press *Open the sheet*, and the whole scheme appears — term by term, week by week, with the lesson numbers, titles and objectives. You do not have to be tracking the sheet to read it. The principal and the vice principals reach the same panel by choosing a department, so they can read any department's scheme without being able to tick anything in it.
 

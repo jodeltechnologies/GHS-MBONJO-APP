@@ -103,7 +103,22 @@ export function timetableRow(entries,day,{mergeEmpty=false}={}){
 // Every lesson of one teacher or one class, with the subject totals printed beside
 // the teacher's sheet. Counts are periods per week, so a double period counts twice.
 export function timetableFor(entries,{teacherId,class:cls}={}){
- const mine=entries.filter(e=>(teacherId?e.teacherId===teacherId:true)&&(cls?e.class===cls:true));
+ let mine=entries.filter(e=>(teacherId?e.teacherId===teacherId:true)&&(cls?e.class===cls:true));
+ // On a teacher's own sheet a lesson taught to several classes at once is one
+ // lesson, in one room, at one period — so the classes are gathered onto a single
+ // row rather than stacked as though the teacher were in two places.
+ if(teacherId&&!cls){
+  const merged=new Map();
+  for(const e of mine){
+   const k=e.unit?[e.unit,e.subject,e.day,e.start].join('\u0001'):null;
+   if(k&&merged.has(k)){const m=merged.get(k);if(!m.classes.includes(e.class))m.classes.push(e.class);continue;}
+   const row={...e,classes:[e.class]};
+   if(k)merged.set(k,row);else merged.set(Symbol(),row);
+  }
+  mine=[...merged.values()].map(r=>r.classes.length>1
+   ?{...r,class:r.classes.sort().map(c=>c.replace(/^Form\s*/i,'')).join(' + ')}
+   :r);
+ }
  const counts=new Map();
  for(const e of mine)counts.set(e.subject,(counts.get(e.subject)||0)+1);
  return {entries:mine,subjects:[...counts].map(([subject,count])=>({subject,count})).sort((a,b)=>a.subject.localeCompare(b.subject)),total:mine.length};
@@ -178,12 +193,22 @@ const periodIndex=start=>timetablePeriods.findIndex(p=>p.start===start);
 // Whatever the browser sends is passed through normalizePreferences again on the
 // server, so a hand-edited request cannot smuggle a value past the limits.
 export const subjectPatterns=['auto','double','single'];
+// How the subjects inside a group relate to each other on the sheet.
+//  parallel — they occupy the same periods and the students split between halls.
+//             This is the option block: Commerce and Geography in Form 5A periods
+//             3 and 4, one hall each.
+//  sameDay  — they are pulled onto the same day where the week allows it. A
+//             preference, not a rule.
+//  apart    — no relation between the subjects; the group exists only to teach its
+//             classes together.
+export const groupModes=['parallel','sameDay','apart'];
 export function defaultPreferences(){
  // maxTeacherPerDay defaults to 8 because a Form 1 to 4 day is exactly 8 periods:
  // a teacher who is in school all day can be teaching all of it. Lowering it is a
  // real choice with a cost — it spreads a teacher over more days and leaves them
  // more free periods between lessons, which is the opposite of what grouping is for.
- return {form5End:880,lastPeriod:10,maxSubjectPerDay:2,maxSubjectPerWeek:10,maxTeacherPerDay:8,maxTeacherDays:5,subjects:{},teachers:{}};
+ return {form5End:880,lastPeriod:10,maxSubjectPerDay:2,maxSubjectPerWeek:10,maxTeacherPerDay:8,maxTeacherDays:5,
+         subjects:{},teachers:{},groups:[]};
 }
 const whole=(v,lo,hi,fallback)=>{const n=Math.round(Number(v));return Number.isFinite(n)?Math.min(hi,Math.max(lo,n)):fallback;};
 const wholeOrNull=(v,lo,hi)=>{if(v===''||v===null||v===undefined)return null;const n=Math.round(Number(v));return Number.isFinite(n)?Math.min(hi,Math.max(lo,n)):null;};
@@ -197,13 +222,36 @@ export function normalizePreferences(raw={},{subjectNames=[],teacherIds=[]}={}){
   maxSubjectPerWeek:whole(p.maxSubjectPerWeek,1,30,d.maxSubjectPerWeek),
   maxTeacherPerDay:whole(p.maxTeacherPerDay,1,10,d.maxTeacherPerDay),
   maxTeacherDays:whole(p.maxTeacherDays,1,5,d.maxTeacherDays),
-  subjects:{},teachers:{}};
+  subjects:{},teachers:{},groups:[]};
  const known=new Set(subjectNames);
  for(const [name,v] of Object.entries(p.subjects||{})){
   if(known.size&&!known.has(name))continue;
   const s=v&&typeof v==='object'?v:{};
-  const entry={pattern:subjectPatterns.includes(s.pattern)?s.pattern:'auto',morning:s.morning===true||s.morning==='true',maxPerDay:wholeOrNull(s.maxPerDay,1,4)};
-  if(entry.pattern!=='auto'||entry.morning||entry.maxPerDay!==null)out.subjects[name]=entry;
+  const entry={pattern:subjectPatterns.includes(s.pattern)?s.pattern:'auto',morning:s.morning===true||s.morning==='true',
+               maxPerDay:wholeOrNull(s.maxPerDay,1,4),maxPerWeek:wholeOrNull(s.maxPerWeek,1,30)};
+  if(entry.pattern!=='auto'||entry.morning||entry.maxPerDay!==null||entry.maxPerWeek!==null)out.subjects[name]=entry;
+ }
+ // Groups. Anything the browser sends that is not a known class or subject is
+ // dropped rather than refused: a group that names a class the school has since
+ // renamed should lose that class, not stop the timetable being generated. What a
+ // group cannot do — name a subject twice, or leave a class with nothing — is
+ // caught when the jobs are built, where the problem can be named.
+ const knownClasses=new Set(classes);
+ const seen=new Set();
+ for(const raw of Array.isArray(p.groups)?p.groups.slice(0,16):[]){
+  const g=raw&&typeof raw==='object'?raw:{};
+  const cls=[...new Set((Array.isArray(g.classes)?g.classes:[]).filter(c=>knownClasses.has(c)))];
+  const subs=[...new Set((Array.isArray(g.subjects)?g.subjects:[]).filter(s=>!known.size||known.has(s)))];
+  const mode=groupModes.includes(g.mode)?g.mode:'parallel';
+  const merge=g.merge===true||g.merge==='true';
+  // A group with no classes, or with nothing to do, is not a group.
+  if(!cls.length||!subs.length)continue;
+  if(mode==='apart'&&!merge)continue;
+  if(mode!=='apart'&&subs.length<2&&!merge)continue;
+  const name=String(g.name||'').trim().slice(0,60)||`${cls.join(' + ')} · ${subs.join(' / ')}`.slice(0,60);
+  if(seen.has(name))continue;
+  seen.add(name);
+  out.groups.push({name,classes:cls,subjects:subs,mode,merge});
  }
  const knownStaff=new Set(teacherIds);
  for(const [id,v] of Object.entries(p.teachers||{})){
@@ -220,9 +268,9 @@ export function normalizePreferences(raw={},{subjectNames=[],teacherIds=[]}={}){
 // otherwise two singles could land back to back and be a double in all but name.
 // A daily cap of 1 likewise forces singles, since a double could never satisfy it.
 function subjectPref(prefs,name){
- const raw=prefs.subjects[name]||{pattern:'auto',morning:false,maxPerDay:null};
+ const raw=prefs.subjects[name]||{pattern:'auto',morning:false,maxPerDay:null,maxPerWeek:null};
  const cap=Math.min(raw.maxPerDay??prefs.maxSubjectPerDay,raw.pattern==='single'?1:4);
- return {...raw,maxPerDay:cap,pattern:cap<2?'single':raw.pattern};
+ return {...raw,maxPerDay:cap,maxPerWeek:raw.maxPerWeek??prefs.maxSubjectPerWeek,pattern:cap<2?'single':raw.pattern};
 }
 const teacherPref=(prefs,id)=>prefs.teachers[id]||{off:[],maxDays:null,maxPerDay:null};
 
@@ -245,7 +293,7 @@ const at=(d,i)=>d*10+i;
 
 // What a placement would cost the teacher. Lower is better. The class is in school
 // all day whatever happens, so most terms here are about the teacher's week.
-function cost(busy,classBusy,d,run,classDayLoad,morning){
+function cost(busy,classBusy,d,run,classDayLoad,morning,{band=0}={}){
  const first=run[0].i,last=run[run.length-1].i;
  let dayCount=0,onThisDay=0;
  for(let day=0;day<timetableDays.length;day++){
@@ -254,6 +302,9 @@ function cost(busy,classBusy,d,run,classDayLoad,morning){
   if(any)dayCount++;
  }
  let c=0;
+ // Subjects the school asked to keep on the same day: worth something, never worth
+ // as much as a teacher's whole extra day in school.
+ if(band)c-=25*Math.min(band,2);
  if(!onThisDay){
   // A new working day is the expensive thing. This is what pulls a teacher's week
   // down to three or four days instead of five.
@@ -289,23 +340,97 @@ function cost(busy,classBusy,d,run,classDayLoad,morning){
 // so regenerating does not reshuffle the whole school for no reason.
 const mulberry32=a=>()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};
 
+// ---------------------------------------------------------------------------
+// From the assignment register to the units the solver places
+// ---------------------------------------------------------------------------
+// Ordinarily one line of the register — a class, a subject, a teacher, so many
+// periods — becomes a handful of blocks, each placed on its own. A group changes
+// that in two ways, and they combine:
+//
+//  merging classes   one lesson covers several classes at once. Form 5A and Form 5B
+//                    sit the same Commerce lesson, one teacher, one hall, and the
+//                    period is taken in both classes' weeks.
+//  parallel subjects one placement carries several lessons. Form 5A periods 3 and 4
+//                    are Commerce and Geography at the same time; the students split
+//                    between two halls and the class is busy either way.
+//
+// So a unit is {classes, lessons, size}: the classes whose week it fills, the
+// lessons taught inside it, and how many consecutive periods it needs. A plain
+// assignment is simply the case of one class and one lesson.
+const classShort=c=>String(c).replace(/^Form\s*/i,'').replace(/Lower Sixth\s*/i,'LS').replace(/Upper Sixth\s*/i,'US').replace(/\s+/g,'').slice(0,6).toUpperCase();
+export function buildJobs(assignments,prefs,allowedClasses=classes){
+ for(const a of assignments){
+  if(!allowedClasses.includes(a.class)||!a.teacherId||!a.subject||!Number.isInteger(+a.periods)||+a.periods<1||+a.periods>30)throw Error('Each assignment needs a class, teacher, subject and 1–30 periods.');
+  const cap=subjectPref(prefs,a.subject).maxPerWeek;
+  if(+a.periods>cap)throw Error(`${a.class} is assigned ${a.periods} periods of ${a.subject} a week, above the limit of ${cap} set in the preferences. Raise the limit or reduce the assignment.`);
+ }
+ const jobs=[],taken=new Set();
+ const push=(classes,lessons,periods,{group='',band=''}={})=>{
+  // Subjects sharing a placement cannot be paired and unpaired separately, so one
+  // subject taught in singles makes the whole placement single.
+  const pattern=lessons.some(l=>subjectPref(prefs,l.subject).pattern==='single')?'single'
+               :lessons.every(l=>subjectPref(prefs,l.subject).pattern==='double')?'double':'auto';
+  for(const size of lessonBlocks(periods,pattern))jobs.push({classes,lessons,size,group,band});
+ };
+ for(const g of prefs.groups){
+  const mine=assignments.filter(a=>g.classes.includes(a.class)&&g.subjects.includes(a.subject)&&!taken.has(a));
+  if(!mine.length)continue;
+  // One lesson per subject, covering several classes where the group says so.
+  const lessons=[];
+  for(const subject of g.subjects){
+   const list=mine.filter(a=>a.subject===subject);
+   if(!list.length)continue;
+   for(const a of list)taken.add(a);
+   if(g.merge&&list.length>1){
+    const periods=[...new Set(list.map(a=>+a.periods))];
+    if(periods.length>1)throw Error(`${g.name}: ${subject} is ${list.map(a=>`${a.periods} periods in ${a.class}`).join(' and ')}. Classes taught together must have the same number of periods.`);
+    const staff=[...new Set(list.map(a=>a.teacherId))];
+    if(staff.length>1)throw Error(`${g.name}: ${subject} in ${list.map(a=>a.class).join(' and ')} is assigned to more than one teacher. A lesson taught to several classes at once has one teacher — change the assignments, or untick teaching them together.`);
+    lessons.push({classes:list.map(a=>a.class).sort(),subject,teacherId:list[0].teacherId,department:list[0].department,periods:+list[0].periods});
+   }else for(const a of list)lessons.push({classes:[a.class],subject,teacherId:a.teacherId,department:a.department,periods:+a.periods});
+  }
+  if(!lessons.length)continue;
+  const label=l=>l.classes.length>1?l.classes.map(classShort).join('+'):g.name;
+  if(g.mode!=='parallel'){
+   // Nothing runs at the same time; each lesson is placed on its own, tagged with
+   // the group so the ones asked to share a day can find each other.
+   for(const l of lessons)push(l.classes,[{subject:l.subject,teacherId:l.teacherId,department:l.department,group:label(l)}],l.periods,
+    {group:g.name,band:g.mode==='sameDay'?g.name:''});
+   continue;
+  }
+  // An option block: the subjects taking the same periods must be the same size,
+  // or they are not options — a student cannot be in two places for the odd period.
+  const buckets=new Map();
+  for(const l of lessons){
+   const k=l.classes.join('\u0001');
+   if(!buckets.has(k))buckets.set(k,[]);
+   buckets.get(k).push(l);
+  }
+  for(const [,bucket] of buckets){
+   const periods=[...new Set(bucket.map(l=>l.periods))];
+   if(periods.length>1)throw Error(`${g.name}: ${bucket.map(l=>`${l.subject} has ${l.periods}`).join(' and ')} periods a week in ${bucket[0].classes.join(' and ')}. Subjects running at the same time must have the same number of periods.`);
+   push(bucket[0].classes,bucket.map(l=>({subject:l.subject,teacherId:l.teacherId,department:l.department,group:label(l)})),periods[0],{group:g.name});
+  }
+ }
+ for(const a of assignments){
+  if(taken.has(a))continue;
+  push([a.class],[{subject:a.subject,teacherId:a.teacherId,department:a.department,group:''}],+a.periods);
+ }
+ return jobs;
+}
+
 export function generateTimetable(assignments,form5End,allowedClasses=classes,{deadlineMs=20000,seed=20262027,preferences,compact=true}={}){
  const prefs=normalizePreferences({...(preferences||{}),form5End:preferences?.form5End??form5End},
   {subjectNames:[...new Set(assignments.map(a=>a.subject))],teacherIds:[...new Set(assignments.map(a=>a.teacherId))]});
  const close=prefs.form5End,last=prefs.lastPeriod;
- const jobs=[];
- for(const a of assignments){
-  if(!allowedClasses.includes(a.class)||!a.teacherId||!a.subject||!Number.isInteger(+a.periods)||+a.periods<1||+a.periods>30)throw Error('Each assignment needs a class, teacher, subject and 1–30 periods.');
-  if(+a.periods>prefs.maxSubjectPerWeek)throw Error(`${a.class} is assigned ${a.periods} periods of ${a.subject} a week, above the limit of ${prefs.maxSubjectPerWeek} set in the preferences. Raise the limit or reduce the assignment.`);
-  for(const size of lessonBlocks(a.periods,subjectPref(prefs,a.subject).pattern))jobs.push({class:a.class,subject:a.subject,teacherId:a.teacherId,department:a.department,size});
- }
+ const jobs=buildJobs(assignments,prefs,allowedClasses);
  if(!jobs.length)return [];
 
  // Refuse the impossible before searching for it, and name what caused it, so the
  // principal can correct the register or the preferences instead of guessing.
  const capacity=cls=>timetableDays.reduce((n,day)=>n+slotsFor(cls,day,close,last).length,0);
- for(const cls of new Set(jobs.map(j=>j.class))){
-  const want=jobs.filter(j=>j.class===cls).reduce((n,j)=>n+j.size,0);
+ for(const cls of new Set(jobs.flatMap(j=>j.classes))){
+  const want=jobs.filter(j=>j.classes.includes(cls)).reduce((n,j)=>n+j.size,0);
   if(want>capacity(cls))throw Error(`${cls} is assigned ${want} periods a week but its week only has ${capacity(cls)}${last<10?` once lessons stop after period ${last}`:''}. Reduce that class's assignments, or allow later periods.`);
  }
  for(const a of assignments){
@@ -313,12 +438,12 @@ export function generateTimetable(assignments,form5End,allowedClasses=classes,{d
   const daysNeeded=Math.ceil(+a.periods/cap);
   if(daysNeeded>timetableDays.length)throw Error(`${a.class} cannot fit ${a.periods} periods of ${a.subject} into a week at no more than ${cap} a day. Raise that subject's daily limit or reduce its periods.`);
  }
- for(const id of new Set(jobs.map(j=>j.teacherId))){
+ for(const id of new Set(jobs.flatMap(j=>j.lessons.map(l=>l.teacherId)))){
   const tp=teacherPref(prefs,id);
-  const mine=jobs.filter(j=>j.teacherId===id);
+  const mine=jobs.filter(j=>j.lessons.some(l=>l.teacherId===id));
   const want=mine.reduce((n,j)=>n+j.size,0);
   const perDay=tp.maxPerDay??prefs.maxTeacherPerDay;
-  const theirClasses=[...new Set(mine.map(j=>j.class))];
+  const theirClasses=[...new Set(mine.flatMap(j=>j.classes))];
   const open=timetableDays.filter(d=>!tp.off.includes(d));
   if(!open.length)throw Error('A teacher has been marked unavailable on every day but still has lessons assigned. Free up a day or move those classes to another teacher.');
   const room=open.map(day=>Math.min(perDay,Math.max(...theirClasses.map(c=>slotsFor(c,day,close,last).length))));
@@ -334,58 +459,89 @@ export function generateTimetable(assignments,form5End,allowedClasses=classes,{d
   if(!runCache.has(k))runCache.set(k,runsFor(cls,timetableDays[d],close,size,last));
   return runCache.get(k);
  };
+ // A placement has to work for every class the unit fills and every teacher inside
+ // it: a run only counts where all of them have that run, on a day none of the
+ // teachers is away.
  for(const j of jobs){
   j.cands=[];
-  const off=teacherPref(prefs,j.teacherId).off;
+  const away=new Set(j.lessons.flatMap(l=>teacherPref(prefs,l.teacherId).off));
   for(let d=0;d<timetableDays.length;d++){
-   if(off.includes(timetableDays[d]))continue;   // the teacher is not in that day at all
-   for(const run of runsOn(j.class,d,j.size))j.cands.push({d,run,cells:run.map(s=>at(d,s.i))});
+   if(away.has(timetableDays[d]))continue;   // a teacher in this unit is not in that day at all
+   let runs=runsOn(j.classes[0],d,j.size);
+   for(const cls of j.classes.slice(1)){
+    const theirs=new Set(runsOn(cls,d,j.size).map(r=>r[0].start));
+    runs=runs.filter(r=>theirs.has(r[0].start));
+   }
+   for(const run of runs)j.cands.push({d,run,cells:run.map(s=>at(d,s.i))});
   }
-  if(!j.cands.length)throw Error(`${j.class} has no room for a ${j.size===2?'double':'single'} period of ${j.subject} on any day its teacher is available. Check the closing time, the latest period, and that teacher's free days.`);
+  if(!j.cands.length)throw Error(`${j.classes.join(' and ')} ${j.classes.length>1?'have':'has'} no room for a ${j.size===2?'double':'single'} period of ${j.lessons.map(l=>l.subject).join(' / ')} on any day ${j.lessons.length>1?'all its teachers are':'its teacher is'} available. Check the closing time, the latest period, and those teachers' free days.`);
  }
 
- const classCnt=new Map(),teachCnt=new Map(),subjDay=new Map(),teachDay=new Map();
- const sKey=j=>j.class+'\u0001'+j.subject;
+ const classCnt=new Map(),teachCnt=new Map(),subjDay=new Map(),teachDay=new Map(),bandDay=new Map();
+ const sKeys=j=>j.classes.flatMap(c=>j.lessons.map(l=>c+'\u0001'+l.subject));
+ const bKeys=j=>j.band?j.classes.map(c=>c+'\u0001'+j.band):[];
  for(const j of jobs){
-  if(!classCnt.has(j.class))classCnt.set(j.class,new Int16Array(CELLS));
-  if(!teachCnt.has(j.teacherId))teachCnt.set(j.teacherId,new Int16Array(CELLS));
-  if(!teachDay.has(j.teacherId))teachDay.set(j.teacherId,new Int16Array(timetableDays.length));
-  if(!subjDay.has(sKey(j)))subjDay.set(sKey(j),new Int16Array(timetableDays.length));
+  for(const c of j.classes)if(!classCnt.has(c))classCnt.set(c,new Int16Array(CELLS));
+  for(const l of j.lessons){
+   if(!teachCnt.has(l.teacherId))teachCnt.set(l.teacherId,new Int16Array(CELLS));
+   if(!teachDay.has(l.teacherId))teachDay.set(l.teacherId,new Int16Array(timetableDays.length));
+  }
+  for(const k of sKeys(j))if(!subjDay.has(k))subjDay.set(k,new Int16Array(timetableDays.length));
+  for(const k of bKeys(j))if(!bandDay.has(k))bandDay.set(k,new Int16Array(timetableDays.length));
  }
  // Periods, not blocks, so the daily limits read the way the principal set them.
  const apply=(j,ci,delta)=>{
-  const c=j.cands[ci],cc=classCnt.get(j.class),tc=teachCnt.get(j.teacherId),sd=subjDay.get(sKey(j)),td=teachDay.get(j.teacherId);
-  for(const cell of c.cells){cc[cell]+=delta;tc[cell]+=delta;}
-  sd[c.d]+=delta*c.cells.length;
-  td[c.d]+=delta*c.cells.length;
+  const c=j.cands[ci],size=c.cells.length;
+  for(const cls of j.classes){const cc=classCnt.get(cls);for(const cell of c.cells)cc[cell]+=delta;}
+  for(const l of j.lessons){
+   const tc=teachCnt.get(l.teacherId);
+   for(const cell of c.cells)tc[cell]+=delta;
+   teachDay.get(l.teacherId)[c.d]+=delta*size;
+  }
+  for(const k of sKeys(j))subjDay.get(k)[c.d]+=delta*size;
+  for(const k of bKeys(j))bandDay.get(k)[c.d]+=delta*size;
  };
  // How many rules this placement would break, counting the block as not placed.
  // Double bookings are physical impossibilities; the daily limits the school set are
  // counted here too, so the repair solver drives them to zero before accepting a
  // timetable rather than treating them as advice.
  const limits=new Map();
- for(const j of jobs)limits.set(j,{subject:subjectPref(prefs,j.subject).maxPerDay,
-                                   teacher:teacherPref(prefs,j.teacherId).maxPerDay??prefs.maxTeacherPerDay,
-                                   days:Math.min(teacherPref(prefs,j.teacherId).maxDays??prefs.maxTeacherDays,timetableDays.length-teacherPref(prefs,j.teacherId).off.length),
-                                   morning:subjectPref(prefs,j.subject).morning});
+ for(const j of jobs)limits.set(j,{
+  subject:Math.min(...j.lessons.map(l=>subjectPref(prefs,l.subject).maxPerDay)),
+  teachers:j.lessons.map(l=>({
+   id:l.teacherId,
+   perDay:teacherPref(prefs,l.teacherId).maxPerDay??prefs.maxTeacherPerDay,
+   days:Math.min(teacherPref(prefs,l.teacherId).maxDays??prefs.maxTeacherDays,timetableDays.length-teacherPref(prefs,l.teacherId).off.length)})),
+  morning:j.lessons.some(l=>subjectPref(prefs,l.subject).morning),
+  sKeys:sKeys(j),bKeys:bKeys(j)});
  const clashes=(j,ci)=>{
   const c=j.cands[ci],size=c.cells.length,lim=limits.get(j);
-  const cc=classCnt.get(j.class),tc=teachCnt.get(j.teacherId),sd=subjDay.get(sKey(j)),td=teachDay.get(j.teacherId);
   let n=0;
-  for(const cell of c.cells)n+=cc[cell]+tc[cell];
-  const overSubject=sd[c.d]+size-lim.subject;        if(overSubject>0)n+=overSubject*2;
-  const overTeacher=td[c.d]+size-lim.teacher;        if(overTeacher>0)n+=overTeacher*2;
-  if(!td[c.d]){
-   let used=0;for(let d=0;d<timetableDays.length;d++)if(td[d])used++;
-   if(used>=lim.days)n+=3;                           // a day beyond the teacher's allowance
+  for(const cls of j.classes){const cc=classCnt.get(cls);for(const cell of c.cells)n+=cc[cell];}
+  for(const t of lim.teachers){const tc=teachCnt.get(t.id);for(const cell of c.cells)n+=tc[cell];}
+  for(const k of lim.sKeys){
+   const over=subjDay.get(k)[c.d]+size-lim.subject;
+   if(over>0)n+=over*2;
+  }
+  for(const t of lim.teachers){
+   const td=teachDay.get(t.id);
+   const over=td[c.d]+size-t.perDay;                 if(over>0)n+=over*2;
+   if(!td[c.d]){
+    let used=0;for(let d=0;d<timetableDays.length;d++)if(td[d])used++;
+    if(used>=t.days)n+=3;                            // a day beyond that teacher's allowance
+   }
   }
   return n;
  };
  const assign=new Int32Array(jobs.length).fill(-1);
  const teacherCostOf=(j,ci)=>{
-  const c=j.cands[ci],tb=teachCnt.get(j.teacherId),cb=classCnt.get(j.class);
+  const c=j.cands[ci],lim=limits.get(j);
+  const cb=classCnt.get(j.classes[0]);
   let load=0;for(let i=0;i<10;i++)if(cb[at(c.d,i)])load++;
-  return cost(tb,cb,c.d,c.run,load,limits.get(j).morning);
+  let band=0;for(const k of lim.bKeys)band+=bandDay.get(k)[c.d];
+  let total=0;
+  for(const t of lim.teachers)total+=cost(teachCnt.get(t.id),cb,c.d,c.run,load,lim.morning,{band});
+  return total/lim.teachers.length;
  };
 
  const stop=Date.now()+deadlineMs;
@@ -463,9 +619,18 @@ export function generateTimetable(assignments,form5End,allowedClasses=classes,{d
  }
  if(!solved)throw Error('No timetable was found that keeps every preference in the time available. Relax a limit — more days for a teacher, more periods a day, or a later closing period — and generate again; no partial timetable was saved.');
 
+ // One entry per class, per lesson, per period: a unit that covers two classes and
+ // carries two subjects fills four cells on the sheets, which is what it does in
+ // the school. `unit` ties them back together so the polish pass below can see that
+ // they were placed as one thing and leave them alone.
  const entries=[];
  jobs.forEach((j,n)=>{
-  for(const s of j.cands[assign[n]].run)entries.push({class:j.class,subject:j.subject,teacherId:j.teacherId,department:j.department,day:timetableDays[j.cands[assign[n]].d],start:s.start,end:s.end});
+  const c=j.cands[assign[n]];
+  const shared=j.classes.length>1||j.lessons.length>1;
+  for(const cls of j.classes)for(const l of j.lessons)for(const s of c.run)
+   entries.push({class:cls,subject:l.subject,teacherId:l.teacherId,department:l.department,
+                 day:timetableDays[c.d],start:s.start,end:s.end,
+                 ...(shared?{unit:`u${n}`,group:l.group||j.group||''}:{})});
  });
  return compact?compactTeacherWeeks(entries,close,{preferences:prefs}):entries;
 }
@@ -474,9 +639,12 @@ export function generateTimetable(assignments,form5End,allowedClasses=classes,{d
 export function teacherWeekCost(entries,teacherId){
  const mine=entries.filter(e=>e.teacherId===teacherId);
  const byDay=new Map();
- for(const e of mine){const i=periodIndex(e.start);if(i<0)continue;if(!byDay.has(e.day))byDay.set(e.day,[]);byDay.get(e.day).push(i);}
+ // A lesson taught to two classes at once is two rows but one period standing in
+ // one room, so periods are counted once. Without this a combined lesson would look
+ // like a double load and read as a negative gap.
+ for(const e of mine){const i=periodIndex(e.start);if(i<0)continue;if(!byDay.has(e.day))byDay.set(e.day,new Set());byDay.get(e.day).add(i);}
  let gaps=0;
- for(const list of byDay.values())gaps+=(Math.max(...list)-Math.min(...list)+1)-list.length;
+ for(const set of byDay.values()){const list=[...set];gaps+=(Math.max(...list)-Math.min(...list)+1)-list.length;}
  return {days:byDay.size,gaps,score:byDay.size*10+gaps};
 }
 
@@ -501,7 +669,10 @@ export function compactTeacherWeeks(entries,form5End,options={}){
   const mine=all.filter(e=>e.teacherId===who);
   const days=new Set(mine.map(e=>e.day));
   if(days.size>Math.min(tp.maxDays??prefs.maxTeacherDays,timetableDays.length-tp.off.length))return false;
-  if(mine.filter(e=>e.day===day).length>(tp.maxPerDay??prefs.maxTeacherPerDay))return false;
+  // Periods, counted once each: a lesson taught to two classes together fills one
+  // period of that teacher's day, not two.
+  const periodsOn=new Set(mine.filter(e=>e.day===day).map(e=>e.start));
+  if(periodsOn.size>(tp.maxPerDay??prefs.maxTeacherPerDay))return false;
   const cap=subjectPref(prefs,subject).maxPerDay;
   if(all.filter(e=>e.class===cls&&e.subject===subject&&e.day===day).length>cap)return false;
   if(subjectPref(prefs,subject).pattern==='single'){
@@ -521,6 +692,11 @@ export function compactTeacherWeeks(entries,form5End,options={}){
   for(const [,block] of [...blocks].sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0)){
    block.sort((a,b)=>a.start-b.start);
    const sample=block[0];
+   // A lesson placed as part of a group is left where it is. Moving one half of an
+   // option block, or one class out of a combined lesson, would break the very
+   // arrangement the school asked for, and this pass only knows how to move one
+   // class's own block.
+   if(block.some(e=>e.unit))continue;
    const rest=current.filter(e=>!block.includes(e));
    const before=teacherWeekCost(current,sample.teacherId).score+morningCost(block);
    let best=null;

@@ -11,7 +11,7 @@ import {postCatalogue,postOptions,whatsappLink} from './posts.js';
 import {exportModel,loadExportAssets,makeDocx,makePdf,downloadBlob} from './exports.js';
 import {encryptBackup} from './backup.js';
 import QRCode from 'qrcode';
-import {classes as baseClasses,levels,levelOf,classesInLevel,departments,roles,normalizeMatricule,promotionEligible,time,clockTime,attestationText,reportSummary,studies,documentCategories,itemCategories,itemConditions,timetablePeriods,timetableBreak,timetableDays,timetableRow,timetableFor,subjectCode,defaultPreferences,normalizePreferences} from './domain.js';
+import {classes as baseClasses,levels,levelOf,classesInLevel,departments,roles,normalizeMatricule,promotionEligible,time,clockTime,attestationText,reportSummary,studies,documentCategories,itemCategories,itemConditions,timetablePeriods,timetableBreak,timetableDays,timetableRow,timetableFor,subjectCode,defaultPreferences,normalizePreferences,teacherWeekCost} from './domain.js';
 import archive from './archive.json';
 const $=s=>document.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let classes=[...baseClasses];
@@ -549,7 +549,10 @@ function timetableHead(){
 function timetableCell(cell,subjects,showClass){
  if(!cell.lessons.length)return `<td colspan="${cell.span}"></td>`;
  const split=cell.lessons.length>1;
- const lesson=(e,i)=>`<div class="tt-lesson">${split?`<span class="tt-group">${esc(e.group||'Group '+(i+1))}</span>`:''}<b>${esc(subjectCode(e.subject,subjects))}</b>${showClass?`<span class="tt-class">${esc(String(e.class||'').toUpperCase())}</span>`:''}<small>${esc(name(e.teacherId))}</small></div>`;
+ // A lesson that belongs to a group carries its label, whether or not the cell is
+ // split: on a class sheet a combined lesson looks ordinary otherwise, and the
+ // students would not know they are sitting it with another class.
+ const lesson=(e,i)=>`<div class="tt-lesson">${split||(e.group&&!showClass)?`<span class="tt-group">${esc(e.group||'Group '+(i+1))}</span>`:''}<b>${esc(subjectCode(e.subject,subjects))}</b>${showClass?`<span class="tt-class">${esc(String(e.class||'').toUpperCase())}</span>`:''}<small>${esc(name(e.teacherId))}</small></div>`;
  return `<td colspan="${cell.span}" class="tt-cell${split?' tt-split':''}${cell.span===1?' tt-narrow':''}">${cell.lessons.map(lesson).join('')}</td>`;
 }
 function timetableGrid(entries,subjects,{mergeEmpty=false,showClass=false,shortDays=false}={}){
@@ -582,9 +585,58 @@ function teachingStaff(){
  const ids=new Set(list('assignment').map(r=>r.data.teacherId));
  return [...ids].map(id=>[id,name(id)]).filter(x=>x[1]).sort((a,b)=>a[1].localeCompare(b[1]));
 }
+// One group: which classes, which subjects, and how they relate. Multi-select
+// boxes rather than checkbox grids, because a school has sixteen classes and forty
+// subjects and the row has to stay readable on a phone.
+function groupRow(g,i,used){
+ const pick=(field,values,chosen,size)=>`<select name="grp:${i}:${field}" multiple size="${Math.min(size,Math.max(3,values.length))}">${values.map(v=>`<option value="${esc(v)}" ${chosen.includes(v)?'selected':''}>${esc(v)}</option>`).join('')}</select>`;
+ return `<fieldset class="tt-group"><legend>${t('Group','Groupe')} ${i+1}</legend>
+  <div class="form-grid">
+   <label class="wide">${t('Name it','Nom')}<input name="grp:${i}:name" value="${esc(g.name||'')}" maxlength="60" placeholder="${esc(t('Form 5 options','Options Form 5'))}"></label>
+   <label>${t('Classes','Classes')}${pick('classes',classes,g.classes||[],6)}<small>${t('Hold Ctrl, or tap, to choose more than one.','Maintenez Ctrl, ou appuyez, pour en choisir plusieurs.')}</small></label>
+   <label>${t('Subjects','Matières')}${pick('subjects',used,g.subjects||[],6)}</label>
+   <label>${t('How the subjects run','Relation entre les matières')}<select name="grp:${i}:mode">${options([
+     ['parallel',t('At the same time — students split between halls','En même temps — les élèves se répartissent')],
+     ['sameDay',t('On the same day where possible','Le même jour si possible')],
+     ['apart',t('Separately — this group only joins the classes','Séparément — ce groupe ne fait que réunir les classes')]],g.mode||'parallel')}</select></label>
+   <label class="tt-join"><input type="checkbox" name="grp:${i}:merge" ${g.merge?'checked':''}><span>${t('Teach the chosen classes together as one lesson','Réunir les classes choisies en un seul cours')}</span></label>
+  </div>
+  <div class="actions">${button(t('Remove this group','Supprimer ce groupe'),'tt-group-remove','secondary',`data-index="${i}"`)}</div></fieldset>`;
+}
+// The group rows are edited before anything is saved, so the panel keeps its own
+// draft of them. It is seeded from the last generated timetable and thrown away
+// once a new one is generated, so the panel always reopens on what was actually used.
+let ttGroups=null;
+const subjectsInUse=()=>[...new Set(list('assignment').map(r=>r.data.subject))].sort();
+// The rows exactly as they stand in the form, including ones still being filled in.
+// normalizePreferences would drop those, which is right when generating and wrong
+// when the head of school has just pressed Add and not chosen anything yet.
+function readGroups(form){
+ const out=new Map();
+ for(const [key,value] of new FormData(form).entries()){
+  const i=key.indexOf(':'),j=key.lastIndexOf(':');
+  if(i<0||j<=i||key.slice(0,i)!=='grp')continue;
+  const id=key.slice(i+1,j),field=key.slice(j+1);
+  if(!out.has(id))out.set(id,{name:'',classes:[],subjects:[],mode:'parallel',merge:false});
+  const g=out.get(id);
+  if(field==='name')g.name=value;
+  if(field==='mode')g.mode=value;
+  if(field==='merge')g.merge=true;
+  if(field==='classes')g.classes.push(value);
+  if(field==='subjects')g.subjects.push(value);
+ }
+ // A row whose every box is empty still exists in the form; keep it, since the
+ // person is in the middle of filling it.
+ return [...out.keys()].sort((a,b)=>Number(a)-Number(b)).map(k=>out.get(k));
+}
+function drawGroups(){
+ const box=$('#tt-groups');
+ if(box)box.innerHTML=(ttGroups||[]).map((g,i)=>groupRow(g,i,subjectsInUse())).join('');
+}
 function timetablePanel(subjects){
  const p=savedPreferences();
- const used=[...new Set(list('assignment').map(r=>r.data.subject))].sort();
+ const used=subjectsInUse();
+ if(ttGroups===null)ttGroups=p.groups.map(g=>({...g}));
  const num=(key,label,val,min,max,hint='')=>`<label>${esc(label)}<input type="number" name="${key}" value="${esc(val)}" min="${min}" max="${max}" step="1" required>${hint?`<small>${esc(hint)}</small>`:''}</label>`;
  const periodChoices=timetablePeriods.map(x=>[String(x.n),`${x.n} · ends ${clockTime(x.end)}`]);
  const subjectRows=used.map(n=>{
@@ -592,15 +644,23 @@ function timetablePanel(subjects){
   return `<tr><td>${esc(n)}</td>
    <td><select name="sub:${esc(n)}:pattern">${options([['auto',t('Automatic','Automatique')],['double',t('Doubles','Blocs de deux')],['single',t('Singles only','Périodes simples')]],v.pattern)}</select></td>
    <td class="tt-tick"><input type="checkbox" name="sub:${esc(n)}:morning" ${v.morning?'checked':''} aria-label="${esc(n)} ${esc(t('prefer mornings','de préférence le matin'))}"></td>
-   <td><input type="number" name="sub:${esc(n)}:maxPerDay" value="${v.maxPerDay??''}" min="1" max="4" step="1" placeholder="${p.maxSubjectPerDay}"></td></tr>`;
+   <td><input type="number" name="sub:${esc(n)}:maxPerDay" value="${v.maxPerDay??''}" min="1" max="4" step="1" placeholder="${p.maxSubjectPerDay}"></td>
+   <td><input type="number" name="sub:${esc(n)}:maxPerWeek" value="${v.maxPerWeek??''}" min="1" max="30" step="1" placeholder="${p.maxSubjectPerWeek}"></td></tr>`;
  }).join('');
+ // Each teacher's week as it currently stands, printed beside the limits that
+ // shape it. A teacher who comes in five days for eleven periods is visible here,
+ // and the box to fix it is on the same row.
+ const current=allTimetableEntries();
  const staffRows=teachingStaff().map(([id,nm])=>{
   const v=p.teachers[id]||{off:[],maxDays:null,maxPerDay:null};
+  const w=current.length?teacherWeekCost(current,id):null;
   return `<tr><td>${esc(nm)}</td>
    <td class="tt-days">${timetableDays.map(d=>`<label title="${esc(d)}"><input type="checkbox" name="stf:${esc(id)}:off" value="${d}" ${v.off.includes(d)?'checked':''}><span>${d.slice(0,2)}</span></label>`).join('')}</td>
    <td><input type="number" name="stf:${esc(id)}:maxDays" value="${v.maxDays??''}" min="1" max="5" step="1" placeholder="${p.maxTeacherDays}"></td>
-   <td><input type="number" name="stf:${esc(id)}:maxPerDay" value="${v.maxPerDay??''}" min="1" max="10" step="1" placeholder="${p.maxTeacherPerDay}"></td></tr>`;
+   <td><input type="number" name="stf:${esc(id)}:maxPerDay" value="${v.maxPerDay??''}" min="1" max="10" step="1" placeholder="${p.maxTeacherPerDay}"></td>
+   <td class="tt-now">${w&&w.days?`<b class="${w.days>=5?'low':'ok'}">${w.days}</b> ${t('days','jours')} · ${w.gaps} ${t('free','libres')}`:'—'}</td></tr>`;
  }).join('');
+ const groupRows=ttGroups.map((g,i)=>groupRow(g,i,used)).join('');
  return `<form id="timetable-form" class="panel tt-prefs">
   <h2>${t('Timetable preferences','Préférences de l’emploi du temps')}</h2>
   <p class="muted">${t('Set these before generating. They are saved with the timetable and reopen here next time.','À définir avant la génération. Elles sont enregistrées avec l’emploi du temps et réapparaissent ici.')}</p>
@@ -613,13 +673,19 @@ function timetablePanel(subjects){
    ${num('maxTeacherPerDay',t('Most periods a teacher may teach in a day','Périodes maximales par jour et par enseignant'),p.maxTeacherPerDay,1,10,t('A Form 1 to 4 day is 8 periods. Lowering this spreads a teacher over more days.','Une journée de la 6e à la 3e compte 8 périodes. Réduire ce nombre étale l’enseignant sur davantage de jours.'))}
    ${num('maxTeacherDays',t('Most days a teacher comes to school','Jours de présence maximaux par enseignant'),p.maxTeacherDays,1,5,t('Applies to every teacher unless their own row says otherwise.','S’applique à tous, sauf indication contraire dans leur ligne.'))}
   </div>
+  <details class="tt-more"${ttGroups.length?' open':''}><summary>${t('Groups: subjects at the same time, classes taught together','Groupes : matières simultanées, classes réunies')} · ${ttGroups.length}</summary>
+   <p class="muted small">${t('A group does two things, and they combine. Subjects set to run at the same time share the period: Form 5A periods 3 and 4 can be Commerce and Geography at once, the students splitting between two halls. Classes taught together sit one lesson with one teacher, so Form 5A and Form 5B take that Commerce period in the same room.','Un groupe fait deux choses, et elles se combinent. Les matières simultanées partagent la période : les périodes 3 et 4 de la Form 5A peuvent être Commerce et Géographie en même temps, les élèves se répartissant entre deux salles. Les classes réunies suivent un seul cours avec un seul enseignant.')}</p>
+   <div id="tt-groups">${groupRows}</div>
+   ${button(t('+ Add a group','+ Ajouter un groupe'),'tt-group-add','secondary')}
+   <p class="muted small">${t('Subjects running at the same time must have the same number of periods a week, and classes taught together must share one teacher and the same number of periods. The generator says which line to correct if they do not.','Les matières simultanées doivent avoir le même volume hebdomadaire, et les classes réunies le même enseignant et le même volume. Le générateur indique la ligne à corriger le cas échéant.')}</p>
+  </details>
   <details class="tt-more"${used.length?'':' hidden'}><summary>${t('Per subject','Par matière')} · ${used.length}</summary>
-   <div class="table-scroll"><table><thead><tr><th>${t('Subject','Matière')}</th><th>${t('Blocks','Blocs')}</th><th>${t('Morning','Matin')}</th><th>${t('Max a day','Max/jour')}</th></tr></thead><tbody>${subjectRows}</tbody></table></div>
+   <div class="table-scroll"><table><thead><tr><th>${t('Subject','Matière')}</th><th>${t('Blocks','Blocs')}</th><th>${t('Morning','Matin')}</th><th>${t('Max a day','Max/jour')}</th><th>${t('Max a week','Max/semaine')}</th></tr></thead><tbody>${subjectRows}</tbody></table></div>
    <p class="muted small">${t('Blocks: Automatic pairs periods where the weekly count allows. Singles only suits Physical Education or Manual Labour. Morning is a preference, not a rule — a full week will still place the subject later rather than fail.','Blocs : « Automatique » regroupe les périodes lorsque le volume le permet. « Périodes simples » convient à l’EPS ou au travail manuel. « Matin » est une préférence : une semaine chargée placera malgré tout la matière plus tard.')}</p>
   </details>
   <details class="tt-more"${staffRows?'':' hidden'}><summary>${t('Per teacher','Par enseignant')} · ${teachingStaff().length}</summary>
-   <div class="table-scroll"><table><thead><tr><th>${t('Teacher','Enseignant')}</th><th>${t('Days they cannot come','Jours d’indisponibilité')}</th><th>${t('Max days','Jours max')}</th><th>${t('Max a day','Max/jour')}</th></tr></thead><tbody>${staffRows}</tbody></table></div>
-   <p class="muted small">${t('Tick a day to keep that teacher free of lessons on it. Leave the two numbers empty to use the school-wide setting above.','Cochez un jour pour libérer totalement cet enseignant. Laissez les deux nombres vides pour appliquer le réglage général ci-dessus.')}</p>
+   <div class="table-scroll"><table><thead><tr><th>${t('Teacher','Enseignant')}</th><th>${t('Days they cannot come','Jours d’indisponibilité')}</th><th>${t('Max days','Jours max')}</th><th>${t('Max a day','Max/jour')}</th><th>${t('Week now','Semaine actuelle')}</th></tr></thead><tbody>${staffRows}</tbody></table></div>
+   <p class="muted small">${t('Tick a day to keep that teacher free of lessons on it. Leave the two numbers empty to use the school-wide setting above. Week now is that teacher in the timetable as it stands — days in school, and free periods sitting between their lessons. To bring a scattered teacher in on fewer days, put that number in their Max days box and generate again.','Cochez un jour pour libérer totalement cet enseignant. Laissez les deux nombres vides pour appliquer le réglage général. « Semaine actuelle » indique les jours de présence et les heures creuses dans l’emploi du temps en place : pour resserrer, indiquez un nombre de jours maximum et régénérez.')}</p>
   </details>
   <div class="actions"><button class="primary">${t('Generate from teacher assignments','Générer à partir des affectations')}</button>${button(t('Reset to defaults','Réinitialiser'),'tt-defaults','secondary')}</div>
   <p class="muted small">${t('Lessons are placed in doubles where the weekly count allows, and each teacher’s periods are grouped so they attend on as few days as possible.','Les cours sont placés en blocs de deux lorsque le volume horaire le permet, et les périodes de chaque enseignant sont regroupées afin de réduire le nombre de jours de présence.')}</p>
@@ -627,20 +693,33 @@ function timetablePanel(subjects){
 }
 // Reads the panel back into the shape the server expects.
 function readPreferences(form){
- const f=new FormData(form),out=defaultPreferences(),subjects={},teachers={};
+ const f=new FormData(form),out=defaultPreferences(),subjects={},teachers={},groups=new Map();
  for(const k of ['form5End','lastPeriod','maxSubjectPerDay','maxSubjectPerWeek','maxTeacherPerDay','maxTeacherDays'])if(f.get(k)!==null)out[k]=Number(f.get(k));
+ // A subject name can contain a colon, so only the first two separators are split.
+ const parts=key=>{const i=key.indexOf(':'),j=key.lastIndexOf(':');return i<0||j<=i?null:[key.slice(0,i),key.slice(i+1,j),key.slice(j+1)];};
  for(const [key,value] of f.entries()){
-  const [tag,id,field]=key.split(':');
-  if(tag==='sub'){subjects[id]=subjects[id]||{pattern:'auto',morning:false,maxPerDay:null};
+  const split=parts(key);
+  if(!split)continue;
+  const [tag,id,field]=split;
+  if(tag==='sub'){subjects[id]=subjects[id]||{pattern:'auto',morning:false,maxPerDay:null,maxPerWeek:null};
    if(field==='pattern')subjects[id].pattern=value;
    if(field==='morning')subjects[id].morning=true;
-   if(field==='maxPerDay')subjects[id].maxPerDay=value===''?null:Number(value);}
+   if(field==='maxPerDay')subjects[id].maxPerDay=value===''?null:Number(value);
+   if(field==='maxPerWeek')subjects[id].maxPerWeek=value===''?null:Number(value);}
   if(tag==='stf'){teachers[id]=teachers[id]||{off:[],maxDays:null,maxPerDay:null};
    if(field==='off')teachers[id].off.push(value);
    if(field==='maxDays')teachers[id].maxDays=value===''?null:Number(value);
    if(field==='maxPerDay')teachers[id].maxPerDay=value===''?null:Number(value);}
+  if(tag==='grp'){
+   if(!groups.has(id))groups.set(id,{name:'',classes:[],subjects:[],mode:'parallel',merge:false});
+   const g=groups.get(id);
+   if(field==='name')g.name=value;
+   if(field==='mode')g.mode=value;
+   if(field==='merge')g.merge=true;
+   if(field==='classes')g.classes.push(value);
+   if(field==='subjects')g.subjects.push(value);}
  }
- return normalizePreferences({...out,subjects,teachers});
+ return normalizePreferences({...out,subjects,teachers,groups:[...groups.values()]});
 }
 function allTimetableEntries(){return list('timetable').flatMap(x=>x.data.entries||[]);}
 function timetableClasses(entries){return [...new Set(entries.map(e=>e.class))].sort();}
@@ -742,7 +821,19 @@ document.addEventListener('click',async e=>{const el=e.target.closest('[data-act
   form.querySelectorAll('input[type=checkbox]').forEach(x=>x.checked=false);
   form.querySelectorAll('select[name^="sub:"]').forEach(x=>x.value='auto');
   form.querySelectorAll('input[type=number][name^="sub:"],input[type=number][name^="stf:"]').forEach(x=>x.value='');
+  ttGroups=[];drawGroups();
   toast(t('Preferences reset. Generate to apply them.','Préférences réinitialisées. Générez pour les appliquer.'));
+ }
+ if(action==='tt-group-add'){
+  ttGroups=readGroups($('#timetable-form'));
+  ttGroups.push({name:'',classes:[],subjects:[],mode:'parallel',merge:false});
+  drawGroups();
+  $('#tt-groups').lastElementChild?.scrollIntoView({block:'nearest'});
+ }
+ if(action==='tt-group-remove'){
+  ttGroups=readGroups($('#timetable-form'));
+  ttGroups.splice(Number(el.dataset.index),1);
+  drawGroups();
  }
  if(action==='print-analytics'&&anReport)printView(`<article class="print-page an-print"><h1>GHS Mbonjo Limbe · ${esc(t('Analytics','Analyses'))}</h1><p>${esc(anFrom)} → ${esc(anTo)}${anClass?' · '+esc(anClass):''}</p>${analyticsView(anReport)}</article>`);
  // --- department documents ---
@@ -1084,7 +1175,17 @@ document.addEventListener('submit',async e=>{e.preventDefault();const form=e.tar
   finally{anBusy=false;render();}
   return;
  }
- if(form.id==='timetable-form'){const preferences=readPreferences(form);const r=await api('timetable',{preferences});await refresh();const n=(r.row?.data?.entries||[]).length;toast(t(`Timetable generated: ${n} periods placed, no teacher or class in two places at once.`,`Emploi du temps généré : ${n} périodes placées, sans conflit.`));}
+ if(form.id==='timetable-form'){
+  const preferences=readPreferences(form);
+  const r=await api('timetable',{preferences});
+  // The panel reopens on what was actually used, not on the draft.
+  ttGroups=null;
+  await refresh();
+  const entries=r.row?.data?.entries||[];
+  const joint=new Set(entries.filter(e=>e.unit).map(e=>e.unit)).size;
+  toast(t(`Timetable generated: ${entries.length} periods placed, no teacher or class in two places at once.${joint?` ${joint} grouped lessons.`:''}`,
+          `Emploi du temps généré : ${entries.length} périodes placées, sans conflit.${joint?` ${joint} cours groupés.`:''}`));
+ }
  if(form.id==='provision-form'){await api('provision',data);$('#modal').close();await refresh();toast('Login created.');}
  if(form.id==='password-form'){await api('password',data);$('#modal').close();profile=null;rows=[];navigate('login');render();toast('Password changed. Please sign in.');}
  if(form.id==='feedback-form'){const old=byId(form.dataset.id);await api('save',{kind:'submission',id:old.id,version:old.version,data:{...old.data,...data}});$('#modal').close();await refresh();}
