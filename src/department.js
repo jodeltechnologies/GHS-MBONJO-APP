@@ -8,6 +8,7 @@
 
 import {documentCategories,itemCategories,itemConditions} from './domain.js';
 import {currentWeek} from './calendar.js';
+import {TERMS} from './reports.js';
 
 // ---------------------------------------------------------------------------
 // Documents
@@ -66,7 +67,9 @@ export function inventorySummary(records){
 // have a "Lesson 1: Introduction" and a sheet can repeat a title across terms.
 export const lessonKey=(lesson,index)=>[index,lesson?.term||'',lesson?.week??'',lesson?.number??'',String(lesson?.title||'').slice(0,60)].join('\u0001');
 
-export const TERMS=['First Term','Second Term','Third Term'];
+// The three terms are named once, in reports.js, so a term means the same thing
+// on a progression sheet as it does on a report card.
+export {TERMS} from './reports.js';
 // Every supplied sheet runs weeks 1-12, 13-24 and 25 onwards.
 // An absent week has no term. Number('') and Number(null) are both 0, which is a
 // finite number below 13, so a blank would otherwise be filed under First Term.

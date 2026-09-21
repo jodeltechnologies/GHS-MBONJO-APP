@@ -2,7 +2,32 @@
 
 No terminal commands are needed.
 
-## This update: timetable groups
+## This update: report cards and the master sheet
+
+**Both sheets now print the way your school prints them.** I built them from the two PDFs you sent — the same letterhead box, the same identity block, the same columns, the teacher's name under each subject, and marks under 10 in red.
+
+**Marks & report cards → Print report cards** now asks for a **term or a sequence**:
+
+- Choose **First Term** and the card shows SEQ1 and SEQ2 side by side, with the final mark as their average.
+- Choose **Sequence 2** and it prints that sequence alone, exactly like the card you sent.
+
+The arithmetic is your school's: total is the mark times the coefficient, the student average is the totals over the coefficients — 115 over 13 gives 08.85, as on your card. Positions, class averages and subject averages are worked out **inside the class**, as you asked. The stream average on the master sheet is the whole level, 5A and 5B together.
+
+The **Remarks** column uses the REFERENCE legend printed on your card: 18–20 A+/E, 15–17 CA, 11–14 CECA, 00–10 CNA.
+
+**There is a photograph box** on the card, passport size, beside the identity block. If a student's record has a photograph it is printed; if not, the box still prints, ruled and empty and marked PHOTO, so you can attach one by hand as before. Photographs are uploaded on the student's record under **Students**.
+
+**The master sheet** carries the summary box you use — on roll, assessed, passed and failed counted both per average and per papers, with the class and stream averages beneath — then the grade grid, subjects sat and passed, totals, averages and positions, and the subject-average row at the foot. You can print it with letter grades or with marks out of 20.
+
+Three things I did differently from your current printout, on purpose:
+
+1. **A dash, never 00.00.** Where nobody has a mark yet, the sheets print a dash. A printed 00.00 looks like a class that scored zero, and a parent cannot tell which it is.
+2. **The master sheet prints landscape,** so nothing is cut off the right-hand edge. Your current printout loses the last columns.
+3. **Grade and Rank are the right way round.** On the card you sent, the column headed *Grade* holds the position (32, 23, 36) and the one headed *Rank* holds the letter (U, C, B). They are swapped in whatever produced it. Mine puts the letter under Grade and the position under Rank. Say the word if you want them left as they were.
+
+One thing to check: **the letter grades**. Your legend gives the four competence bands, but not the A/B/C/D/E/U scale the master sheet uses. I set it from the four marks on your card — 14 is a B, 11 a C, 7 and 4 are both U — which gives A 16–20, B 14–15, C 11–13, D 9–10, E 8, U 0–7. If your real bands differ, tell me the numbers and I will change them in one line.
+
+## Previous update: timetable groups
 
 **Two subjects can now run in the same period.** Form 5A periods 3 and 4 as Commerce *and* Geography, the Commerce students in one hall and the Geography students in another — the arrangement you described. Both appear in the same box on the class sheet with their own teachers, and the generator keeps them together: they can never drift onto different periods.
 

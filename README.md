@@ -203,8 +203,30 @@ Charts are inline SVG. The site's Content-Security-Policy is `script-src 'self'`
 - Promotion exams are blocked for Form 5 and Upper Sixth.
 - Marks use 0–20, with positive subject coefficients. A missing mark is not treated as zero.
 - The administration publishes marks. Published report cards can be printed for a class or accessed by the student/linked parent.
-- Report cards include photograph, identity, subjects, coefficients, weighted total/average, rank, class statistics and signature/observation spaces.
-- The layout is adapted from the supplied report-card image. Full annual/term aggregation, institutional grade bands, subject ranks, competence codes, stored discipline comments and school-specific promotion rules still need confirmation and implementation. Results are labelled provisional until all required marks are published.
+- Both printed sheets follow the school's own layout, supplied as PDFs of its current printouts.
+- The report card carries a passport-size photograph box beside the identity block. A stored photograph is printed; where there is none the box still prints, ruled and empty, so one can be attached by hand. Only an inline image is accepted, so printing a card never fetches anything over the network.
+
+#### The rules behind the figures
+
+These are the school's, confirmed by the head of department, and they live in one file — `src/reports.js` — so a rule is changed in one place rather than in the markup of two sheets.
+
+A **term is two sequences**: First Term is Sequences 1 and 2, Second Term 3 and 4, Third Term 5 and 6. Printing a term gives a column per sequence and a **final mark** that is their average. Printing a single sequence gives that sequence alone, as the school's sample card does. A sequence that was never sat is not a zero — a student assessed once is judged on that one mark rather than on half of it.
+
+A subject's **total** is the final mark times its coefficient, and the **student average** is the sum of those totals over the sum of the coefficients. On the sample card that is 115 over 13, printing as 08.85; the tests assert exactly that.
+
+**Positions, class averages, subject averages and subject positions are worked out inside the class.** Only the **stream average** leaves it — Form 4A and Form 4B taken together — because that is the one figure the master sheet prints for the level.
+
+The **remark** column follows the REFERENCE table printed at the foot of the school's own card: 18–20 A+/E, 15–17 CA, 11–14 CECA, 00–10 CNA. The **letter grade** is a separate A-to-U scale which the card does not print; the boundaries in `letterScale` are set from the four marks the sample card shows (14 is a B, 11 a C, 7 and 4 both U) and are one edit away from being changed.
+
+The master sheet counts passes twice, as the school's does. **Per average** is a student average of 10 or more. **Per papers** is a student who passed at least half the papers they sat. Both are counted over the students who were assessed, not over the roll, which is what reproduces the school's own 73.21% from 41 of 56.
+
+A mark below 10, and anything derived from it, prints in red.
+
+#### Two deliberate differences from the school's current printout
+
+Where no mark exists the sheets print a dash, not `00.00`. The school's current printout shows `00.00` for a subject nobody has been assessed in, which reads as a class that scored zero; a parent cannot tell the two apart. The same rule runs through every total, average and position: a blank is left out, never counted as nothing.
+
+The master sheet prints landscape. The school's current portrait printout cuts its last columns — subjects passed, totals, averages, positions — off the right-hand edge of the page.
 
 ### Attestations
 

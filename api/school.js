@@ -2,12 +2,13 @@ import bundledStudents from './data/students.json' with {type:'json'};
 import progressionSheets from './data/progression.json' with {type:'json'};
 import {validateQuestions,publicQuestions,gradeAttempt,acceptAnswers} from '../src/exams.js';
 import {enrolment,availableSubjects,academicYear} from '../src/academics.js';
+import {classReport,assessmentsIn,streamAverage} from '../src/reports.js';
 import {providers,chooseModel} from '../src/providers.js';
 import {trustedOrigin} from '../src/origin.js';
 import {effectiveRole,canUseWriter,colleagueContacts} from '../src/posts.js';
 import {writingInstruction,cleanGeneratedText} from '../src/writing-style.js';
 import crypto from 'node:crypto';
-import {attestationText,classes,roles,normalizeMatricule,normalizeBirthDate,validateRecord,generateTimetable,normalizePreferences,studies,reportSummary} from '../src/domain.js';
+import {attestationText,classes,classesInLevel,roles,normalizeMatricule,normalizeBirthDate,validateRecord,generateTimetable,normalizePreferences,studies} from '../src/domain.js';
 import {canRead,canWrite,admin,assigned,staff} from '../src/access.js';
 import {schoolAnalytics} from '../src/analytics.js';
 const base=()=>process.env.SUPABASE_URL?.replace(/\/$/,''),key=()=>process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -70,16 +71,48 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   }
  }
  if(op==='marks'){if(!['principal','vp','teacher','hod'].includes(p.role))fail('Staff marks access required.',403);if(!/^\d{4}\/\d{4}$/.test(b.year||''))fail('Choose an academic year such as 2026/2027.');if(b.class&&!classNames.includes(b.class))fail('Choose a valid class.');const found=await allRecords('kind=eq.mark&data->>year=eq.'+enc(b.year)+(b.class?'&data->>class=eq.'+enc(b.class):''));return res.json({rows:found.filter(r=>canRead(p,r,all))});}
- if(op==='reports')all.push(...await allRecords('kind=eq.mark&data->>class=eq.'+enc(b.class)+'&data->>year=eq.'+enc(b.year)+'&data->>assessment=eq.'+enc(b.assessment)+'&data->>status=eq.published'));
+ // A report covers a whole term — both its sequences — and the stream average on
+ // the master sheet covers the level, so the marks of every class in the level are
+ // read, not just the one being printed. One query per class and assessment keeps
+ // the filter simple and the assessment names, which contain spaces, unescaped.
+ if(op==='reports'){
+  const wanted=assessmentsIn(b.assessment||'').filter(Boolean);
+  if(!wanted.length)fail('Choose a term, a sequence or the promotion exam.');
+  if(!classNames.includes(b.class))fail('Choose a valid class.');
+  for(const cls of classesInLevel(b.class,classNames))for(const a of wanted)
+   all.push(...await allRecords('kind=eq.mark&data->>class=eq.'+enc(cls)+'&data->>year=eq.'+enc(b.year)+'&data->>assessment=eq.'+enc(a)+'&data->>status=eq.published'));
+ }
  if(op==='state'){const visible=all.filter(r=>canRead(p,r,all)).map(r=>redact(p,r));for(const r of all.filter(r=>r.kind==='profile'&&r.data.role!=='parent'))if(!visible.some(x=>x.id===r.id))visible.push({id:r.id,kind:'directory',data:{name:r.data.name}});return res.json({profile:p,rows:visible});}
  if(op==='reports'){
   if(!['principal','vp','student','parent'].includes(p.role))fail('Only the administration, student or linked parent can access a full report.',403);
-  let students=b.year===academicYear()?all.filter(r=>r.kind==='student'&&r.data.class===b.class):[];
-  const marks=all.filter(r=>r.kind==='mark'&&r.data.class===b.class&&r.data.year===b.year&&r.data.assessment===b.assessment&&r.data.status==='published');
-  for(const m of marks){const r=all.find(r=>r.kind==='student'&&r.id===m.data.studentId);if(r&&!students.some(x=>x.id===r.id))students.push({...r,data:m.data.studentSnapshot||{...r.data,class:b.class}});}
-  const avgs=students.map(s=>({id:s.id,average:reportSummary(marks.filter(m=>m.data.studentId===s.id).map(m=>m.data)).average})).filter(x=>x.average!==null);
-  const permitted=students.filter(r=>canRead(p,r,all));
-  return res.json({reports:permitted.map(student=>({student,marks:marks.filter(m=>m.data.studentId===student.id),subjects:[...new Set([...(student.data.requiredSubjects||[]),...(student.data.subjects||[]),...marks.filter(m=>m.data.studentId===student.id).map(m=>m.data.subject)])],subjectStats:Object.fromEntries([...new Set(marks.map(m=>m.data.subject))].map(subject=>{const group=marks.filter(m=>m.data.subject===subject&&m.data.mark!==''&&m.data.mark!=null);const own=group.find(m=>m.data.studentId===student.id);return [subject,{average:group.length?group.reduce((n,m)=>n+Number(m.data.mark),0)/group.length:null,rank:own?1+group.filter(m=>Number(m.data.mark)>Number(own.data.mark)).length:null}]})),stats:{enrolment:students.length,rank:avgs.find(x=>x.id===student.id)?1+avgs.filter(x=>x.average>avgs.find(x=>x.id===student.id).average).length:null,rankedCount:avgs.length,classAverage:avgs.length?avgs.reduce((s,x)=>s+x.average,0)/avgs.length:null,highest:avgs.length?Math.max(...avgs.map(x=>x.average)):null,lowest:avgs.length?Math.min(...avgs.map(x=>x.average)):null}}))});
+  const wanted=assessmentsIn(b.assessment);
+  const marksIn=cls=>all.filter(r=>r.kind==='mark'&&r.data.class===cls&&r.data.year===b.year&&wanted.includes(r.data.assessment)&&r.data.status==='published').map(r=>r.data);
+  // Who is on the roll: everyone registered in the class this year, plus anyone a
+  // published mark names, so a student who has since left still gets their sheet.
+  const rollOf=cls=>{
+   const out=b.year===academicYear()?all.filter(r=>r.kind==='student'&&r.data.class===cls):[];
+   for(const m of marksIn(cls)){
+    const r=all.find(r=>r.kind==='student'&&r.id===m.studentId);
+    if(r&&!out.some(x=>x.id===r.id))out.push({...r,data:m.studentSnapshot||{...r.data,class:cls}});
+   }
+   return out.sort((a,c)=>String(a.data.name).localeCompare(String(c.data.name)));
+  };
+  const coefficients={};
+  for(const s of availableSubjects(all))if(Number(s.coefficient)>0)coefficients[s.name]=Number(s.coefficient);
+  // The subjects a sheet lists: the class's compulsory ones plus the student's own
+  // extras, so a subject they take but have no mark in still prints with dashes.
+  const subjectsFor=s=>{const e=enrolment(s.data,all);return [...new Set([...(e.requiredSubjects||[]),...(s.data.subjects||[])])];};
+  const build=cls=>classReport({students:rollOf(cls),marks:marksIn(cls),choice:b.assessment,subjectsFor,coefficients});
+  const own=build(b.class);
+  // The stream average is the level's students taken together — Form 4A and 4B as
+  // one — which is the only figure on either sheet that leaves the class.
+  const level=classesInLevel(b.class,classNames)
+   .map(cls=>(cls===b.class?own:build(cls)).sheets.map(x=>x.totals.average));
+  own.streamAverage=streamAverage(level);
+  // The administration prints the class; a student or parent gets only their own
+  // sheet, with the class figures it is measured against left intact.
+  const visible=own.sheets.filter(x=>canRead(p,all.find(r=>r.id===x.student.id)||{kind:'student',data:x.student.data},all));
+  return res.json({report:{...own,sheets:visible},class:b.class,year:b.year,assessment:b.assessment});
  }
 
  if(op==='import-students'){
