@@ -93,7 +93,7 @@ function loginCandidates(form){
 function loginFilters(){return `<div class="form-grid"><label>${t('Account group','Groupe de comptes')}<select name="group" data-login-filter>${options([['teachers',t('Teachers','Enseignants')],['parents',t('Parents','Parents')],['students',t('Students','Élèves')],['staff',t('Other staff','Autre personnel')]])}</select></label><label data-login-school-filter>${t('Stream','Section')}<select name="loginStream" data-login-filter><option value="">${t('All streams','Toutes les sections')}</option>${options([...new Set(studentsInYear(rows,portalYear).map(r=>classStream(r.data.class,rows)))].sort())}</select></label><label data-login-school-filter>${t('Class','Classe')}<select name="loginClass" data-login-filter></select></label></div><p class="muted">${t('Academic year','Année scolaire')}: ${esc(portalYear)}</p><p data-login-count role="status"></p>`;}
 function updateLoginFilters(form,resetClass=false){
  const group=form.elements.group.value,school=group==='students'||group==='parents',stream=form.elements.loginStream.value,chosen=resetClass?'':form.elements.loginClass.value;
- form.querySelectorAll('[data-login-school-filter]').forEach(el=>el.hidden=!school);
+ form.querySelectorAll('[data-login-school-filter]').forEach(el=>{el.hidden=!school;el.style.display=school?'':'none';});
  if(!school){form.elements.loginStream.value='';form.elements.loginClass.value='';}
  const classList=[...new Set(studentsInYear(rows,portalYear).filter(r=>!school||!stream||classStream(r.data.class,rows)===stream).map(r=>r.data.class).filter(Boolean))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
  form.elements.loginClass.innerHTML=`<option value="">${t('All classes','Toutes les classes')}</option>`+options(classList,chosen);
