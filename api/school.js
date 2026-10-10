@@ -1,3 +1,4 @@
+import {promotionPlan,nextAcademicYear} from '../src/promotion.js';
 import {CONTROL_ID,schoolControls,changeControls,markSaveAllowed} from '../src/school-controls.js';
 import {accountUsername,accountEmail,canProvision,normalizeUsername} from '../src/accounts.js';
 import bundledStudents from './data/students.json' with {type:'json'};
@@ -43,7 +44,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
    const m=normalizeMatricule(b.matricule);const dob=normalizeBirthDate(b.birthDate);
    if(!/^[A-Z0-9]{5,25}$/.test(m)||!dob)fail('Invalid login.',401);
    const rows=await db(`school_records?kind=eq.student&data->>matricule=eq.${encodeURIComponent(m)}`);const r=rows[0];
-   if(!r||r.data.authId||['dismissed','transferred out'].includes(r.data.status))fail('Invalid login.',401);
+   if(!r||r.data.authId||['dismissed','transferred out','graduated'].includes(r.data.status))fail('Invalid login.',401);
    const stored=normalizeBirthDate(r.data.birthDate);
    if(!stored)fail('Your school record has no date of birth yet. Ask the school administration to complete it.',403);
    if(stored!==dob)fail('Invalid login.',401);
@@ -59,7 +60,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   }
   const r=await fetch(`${base()}/auth/v1/token?grant_type=password`,{method:'POST',headers:{apikey:key(),'Content-Type':'application/json'},body:JSON.stringify({email,password:b.password})});const auth=await r.json();if(!r.ok)fail('Username or password is incorrect.',401);
   const accounts=await db(`school_records?kind=in.(profile,student)&data->>authId=eq.${auth.user.id}`);
-  const account=accounts.find(x=>x.kind==='profile'&&x.data.active!==false)||accounts.find(x=>x.kind==='student'&&!['dismissed','transferred out'].includes(x.data.status));
+  const account=accounts.find(x=>x.kind==='profile'&&x.data.active!==false)||accounts.find(x=>x.kind==='student'&&!['dismissed','transferred out','graduated'].includes(x.data.status));
   if(!account)fail('Contact the principal to activate your school account.',403);
   issue(res,{authId:auth.user.id,accessToken:auth.access_token,...(account.kind==='student'?{studentId:account.id}:{})});return res.json({ok:true});
  }
@@ -67,12 +68,24 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
  if(op==='backup-page'&&s.studentId)fail('Only the principal can export school records.',403);
  const all=await allRecords(op==='backup-page'?'kind=eq.profile':'kind=in.(profile,student,assignment,classroom,subject,school_control)');let p;
  if(s.accessToken){const auth=await fetch(`${base()}/auth/v1/user`,{headers:{apikey:key(),Authorization:`Bearer ${s.accessToken}`}});if(!auth.ok)fail('Session expired. Please sign in again.',401);const user=await auth.json();if(user.id!==s.authId)fail('Session expired.',401);}
- if(s.studentId){const r=all.find(r=>r.id===s.studentId&&r.kind==='student');if(!r||(r.data.authId&&(!s.accessToken||r.data.authId!==s.authId))||['dismissed','transferred out'].includes(r.data.status))fail('Account inactive.',401);p={...r.data,id:r.id,role:'student'};}
+ if(s.studentId){const r=all.find(r=>r.id===s.studentId&&r.kind==='student');if(!r||(r.data.authId&&(!s.accessToken||r.data.authId!==s.authId))||['dismissed','transferred out','graduated'].includes(r.data.status))fail('Account inactive.',401);p={...r.data,id:r.id,role:'student'};}
  else {const r=all.find(r=>r.kind==='profile'&&r.data.authId===s.authId&&r.data.active!==false);if(!r)fail('Account inactive.',403);p={...r.data,id:r.id,post:r.data.role,role:effectiveRole(r.data.role)};}
  if(p.passwordChangeRequired&&op!=='password'){if(op==='state')return res.json({profile:{id:p.id,name:p.name,role:p.role,passwordChangeRequired:true},rows:[]});fail('Change your temporary password before using the portal.',403);}
  for(const r of all.filter(r=>r.kind==='student'))r.data=enrolment(r.data,all);if(p.role==='student')p=enrolment(p,all);
  const controls=schoolControls(all);
- if(op==='school-controls'){const old=all.find(r=>r.id===CONTROL_ID&&r.kind==='school_control');if(!old)fail('School controls are not ready. Contact the principal.',409);if(b.version!==old.version)fail('School controls changed. Refresh and try again.',409);let data;try{data=changeControls(p,controls,b);}catch(e){fail(e.message,403);}const saved=await db('rpc/school_save_record','POST',{record_kind:'school_control',record_data:data,actor_id:p.id,record_id:old.id,expected_version:old.version});return res.json({ok:true,controls:saved[0]});}
+ if(['promotion-preview','advance-year'].includes(op)){
+  if(p.role!=='principal')fail('Only the principal can advance the academic year.',403);
+  if(controls.rollovers?.[b.year])fail('This year was already advanced. Select it from the year dropdown without advancing again.',409);
+  let plan;try{plan=promotionPlan(all,controls.activeYear,b.year,{actor:p.id});}catch(e){fail(e.message);}
+  const snapshot=all.filter(r=>['student','classroom'].includes(r.kind)).map(r=>({id:r.id,version:r.version})).sort((a,b)=>a.id.localeCompare(b.id));
+  const version=all.find(r=>r.id===CONTROL_ID)?.version;
+  const token=crypto.createHash('sha256').update(JSON.stringify({from:controls.activeYear,to:b.year,version,snapshot})).digest('hex');
+  if(op==='promotion-preview')return res.json({fromYear:plan.fromYear,toYear:plan.toYear,advancing:plan.advancing,exiting:plan.exiting,groups:plan.groups,held:plan.held,token});
+  if(b.token!==token)fail('Student or class records changed. Preview the year change again.',409);
+  const result=await db('rpc/school_advance_year','POST',{actor_id:p.id,control_id:CONTROL_ID,expected_version:version,from_year:controls.activeYear,to_year:b.year,changes:plan.updates.map(({id,version,data})=>({id,version,data})),expected_snapshot:snapshot});
+  return res.json({ok:true,...result,advancing:plan.advancing,exiting:plan.exiting,held:plan.held.length});
+ }
+ if(op==='school-controls'){const old=all.find(r=>r.id===CONTROL_ID&&r.kind==='school_control');if(!old)fail('School controls are not ready. Contact the principal.',409);if(b.version!==old.version)fail('School controls changed. Refresh and try again.',409);if(b.action==='year'&&p.role!=='principal')fail('Only the principal can change the academic year.',403);if(b.action==='year'&&+b.year?.slice(0,4)>+controls.activeYear.slice(0,4)&&!controls.rollovers?.[b.year])fail('Preview student advancement before opening a new academic year.');let data;try{data=changeControls(p,controls,b);}catch(e){fail(e.message,403);}const saved=await db('rpc/school_save_record','POST',{record_kind:'school_control',record_data:data,actor_id:p.id,record_id:old.id,expected_version:old.version});return res.json({ok:true,controls:saved[0]});}
  if(p.role!=='principal'&&['marks','reports','analytics','timetable'].includes(op)&&b.year&&b.year!==controls.activeYear)fail('The principal sets the school academic year. Refresh to use '+controls.activeYear+'.',403);
  const classNames=[...new Set([...classes,...all.filter(r=>r.kind==='classroom').map(r=>r.data.name)])];
  const enc=encodeURIComponent;
@@ -300,4 +313,5 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
  }
  fail('Unknown action.');
  }catch(e){res.status(e.status||500).json({error:e.status?e.message:'The request could not be completed. Please try again.'});}}
+
 

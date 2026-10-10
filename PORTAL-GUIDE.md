@@ -29,3 +29,12 @@ If a task fails, read the message shown near the form. If the school year or ent
 Teachers can choose Attendance summaries on the Attendance page or School summaries on Home. Choose a date range, class and subject to see rates, presence, absence, late and excused counts. Teacher reports contain only their assigned subjects and classes for the shared year.
 
 The principal, VP and discipline staff see school-wide attendance reports. Designated administrative accounts (including secretary, bursar, stores accountant, guidance counsellor and ICT coordinator) see aggregate attendance summaries without individual pupil names or marks. They do not receive additional access to individual registers. Present and late count as attendance. Excused absences are reported separately and excluded from the percentage. Missing registers are not counted as absences.
+
+
+## Annual student advancement
+
+The principal selects the next academic year from the Home dropdown and reviews the proposed class movements before confirming. The dropdown always includes the next three future years and adds another future year as the current year advances. Advance one year at a time.
+
+Forms 1 to 4 move to the next form with the same class suffix. Form 5 moves to Lower Sixth using its configured Arts or Science stream. Lower Sixth moves to Upper Sixth in the same stream. Upper Sixth completes school, stays in the historical records, leaves the new-year class lists and loses active student portal access. Dismissed, transferred-out, graduated and unassigned records are not advanced. Existing destination-year enrolments and unclear classes are held for review.
+
+All updates and the shared academic year are applied in one transaction. A stale preview is rejected, and each year can be advanced only once. Mark entry starts closed in the new year. Earlier attendance, marks and class history are retained. Selecting an earlier or already-advanced year changes the viewing year without repeating advancement.
