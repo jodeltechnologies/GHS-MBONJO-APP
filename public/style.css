@@ -64,3 +64,9 @@
 .portal .table-scroll>table>tbody>tr>td .badge{min-width:100px;max-width:220px}
 .portal .toolbar>*{max-width:100%;white-space:normal;overflow-wrap:anywhere}
 @media(max-width:850px){.portal-identity strong{max-width:100%}.portal .workspace-header{flex-wrap:wrap}.portal .table-scroll{overscroll-behavior-x:contain}}
+
+
+/* Compact school lists on phones retain labels and full names. */
+[data-list-filters] input{min-width:0}[data-mark-input]{width:100px!important;min-width:80px;margin:0} [data-save-feedback]{margin:12px 0;overflow-wrap:anywhere}
+.record-list tr[hidden]{display:none!important}
+@media(max-width:600px){.record-list{border:0;background:transparent;overflow:visible!important}.record-list>table,.record-list>table>tbody{display:block;width:100%}.record-list>table>thead{display:none}.record-list>table>tbody>tr{display:block;border:1px solid #dce6df;border-radius:12px;background:#fff;margin:0 0 14px;padding:10px}.record-list>table>tbody>tr>td{display:grid;grid-template-columns:minmax(90px,35%) minmax(0,1fr);gap:10px;min-width:0!important;padding:8px 4px;overflow-wrap:anywhere}.record-list td::before{content:attr(data-label);font-weight:600;color:#63776f}.record-list td:last-child{border-bottom:0}.portal .record-list td .badge{min-width:0;max-width:100%}.portal .record-list td button{white-space:normal}.portal-identity strong{flex:1 1 140px}.portal-identity>.badge{flex:1 1 100%;border-radius:8px}.portal .toolbar{align-items:stretch}.portal .toolbar button{flex:1 1 160px}}

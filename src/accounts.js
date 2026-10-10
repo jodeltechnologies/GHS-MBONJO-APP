@@ -6,4 +6,5 @@ export function accountUsername(record, records) {
  return taken ? `${preferred}.${record.id.replaceAll('-','')}` : preferred;
 }
 export const accountEmail = record => `${record.id}@accounts.ghs-mbonjo.invalid`;
-export const canProvision = record => ['profile','student'].includes(record.kind) && !record.data.authId && record.data.active !== false && !['dismissed','transferred out'].includes(record.data.status);
+export const canProvision = record => ['profile','student'].includes(record.kind) && !record.data.authId && record.data.active !== false && !['dismissed','transferred out','graduated','completed'].includes(record.data.status);
+
