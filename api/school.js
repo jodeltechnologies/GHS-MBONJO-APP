@@ -1,3 +1,4 @@
+import {notificationAction} from '../src/notifications.js';
 import {promotionPlan,nextAcademicYear} from '../src/promotion.js';
 import {CONTROL_ID,schoolControls,changeControls,markSaveAllowed} from '../src/school-controls.js';
 import {accountUsername,accountEmail,canProvision,normalizeUsername} from '../src/accounts.js';
@@ -73,6 +74,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
  if(s.authId&&(s.authEpoch||0)!==(p.authEpoch||0))fail('Your login was reset. Please sign in with your new temporary password.',401);
  if(p.passwordChangeRequired&&op!=='password'){if(op==='state')return res.json({profile:{id:p.id,name:p.name,role:p.role,passwordChangeRequired:true},rows:[]});fail('Change your temporary password before using the portal.',403);}
  for(const r of all.filter(r=>r.kind==='student'))r.data=enrolment(r.data,all);if(p.role==='student')p=enrolment(p,all);
+ if(op?.startsWith('notification-'))return res.json(await notificationAction(op,b,{p,all,db,crypt,fail,rate,req}));
  const controls=schoolControls(all);
  if(['promotion-preview','advance-year'].includes(op)){
   if(p.role!=='principal')fail('Only the principal can advance the academic year.',403);
@@ -337,6 +339,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
  }
  fail('Unknown action.');
  }catch(e){res.status(e.status||500).json({error:e.status?e.message:'The request could not be completed. Please try again.'});}}
+
 
 
 

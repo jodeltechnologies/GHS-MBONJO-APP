@@ -35,7 +35,7 @@
   ],
   "functions": {
     "api/school.js": {
-      "maxDuration": 60,
+      "maxDuration": 300,
       "includeFiles": "api/data/**"
     }
   },
