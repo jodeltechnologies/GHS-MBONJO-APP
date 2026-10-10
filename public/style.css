@@ -47,3 +47,20 @@
    A bare @page applies to the whole document, so the sheets that need landscape
    claim it by name instead of turning every printout sideways. */
 @page{size:A4 portrait;margin:10mm}@page landscape{size:A4 landscape;margin:8mm}.tt-sheet,.master-sheet{page:landscape}
+
+/* Keep full staff names and roles readable at every screen width. */
+.portal aside,.portal-identity,.portal-identity>div,.workspace-header>div{min-width:0}
+.portal-identity{align-items:flex-start}
+.portal-identity .avatar{flex:0 0 40px}
+.portal-identity strong{display:block;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.portal-identity>div{flex:1 1 140px;max-width:100%}
+.portal .badge{max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.5}
+.portal aside nav button,.portal aside nav summary{white-space:normal;overflow-wrap:anywhere}
+.portal .workspace-header h1,.portal .workspace-header p{overflow-wrap:anywhere}
+.portal .table-scroll{min-width:0;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.portal .table-scroll>table{table-layout:auto}
+.portal .table-scroll>table>thead>tr>th,.portal .table-scroll>table>tbody>tr>td{min-width:130px;white-space:normal;overflow-wrap:break-word}
+.portal .table-scroll>table>thead>tr>th:first-child,.portal .table-scroll>table>tbody>tr>td:first-child{min-width:200px}
+.portal .table-scroll>table>tbody>tr>td .badge{min-width:100px;max-width:220px}
+.portal .toolbar>*{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+@media(max-width:850px){.portal-identity strong{max-width:100%}.portal .workspace-header{flex-wrap:wrap}.portal .table-scroll{overscroll-behavior-x:contain}}
