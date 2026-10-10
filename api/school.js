@@ -62,7 +62,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   const accounts=await db(`school_records?kind=in.(profile,student)&data->>authId=eq.${auth.user.id}`);
   const account=accounts.find(x=>x.kind==='profile'&&x.data.active!==false)||accounts.find(x=>x.kind==='student'&&!['dismissed','transferred out','graduated'].includes(x.data.status));
   if(!account)fail('Contact the principal to activate your school account.',403);
-  issue(res,{authId:auth.user.id,accessToken:auth.access_token,...(account.kind==='student'?{studentId:account.id}:{})});return res.json({ok:true});
+  issue(res,{authId:auth.user.id,accessToken:auth.access_token,authEpoch:account.data.authEpoch||0,...(account.kind==='student'?{studentId:account.id}:{})});return res.json({ok:true});
  }
  const s=session(req);if(!s)fail('Please sign in.',401);
  if(op==='backup-page'&&s.studentId)fail('Only the principal can export school records.',403);
@@ -70,6 +70,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
  if(s.accessToken){const auth=await fetch(`${base()}/auth/v1/user`,{headers:{apikey:key(),Authorization:`Bearer ${s.accessToken}`}});if(!auth.ok)fail('Session expired. Please sign in again.',401);const user=await auth.json();if(user.id!==s.authId)fail('Session expired.',401);}
  if(s.studentId){const r=all.find(r=>r.id===s.studentId&&r.kind==='student');if(!r||(r.data.authId&&(!s.accessToken||r.data.authId!==s.authId))||['dismissed','transferred out','graduated'].includes(r.data.status))fail('Account inactive.',401);p={...r.data,id:r.id,role:'student'};}
  else {const r=all.find(r=>r.kind==='profile'&&r.data.authId===s.authId&&r.data.active!==false);if(!r)fail('Account inactive.',403);p={...r.data,id:r.id,post:r.data.role,role:effectiveRole(r.data.role)};}
+ if(s.authId&&(s.authEpoch||0)!==(p.authEpoch||0))fail('Your login was reset. Please sign in with your new temporary password.',401);
  if(p.passwordChangeRequired&&op!=='password'){if(op==='state')return res.json({profile:{id:p.id,name:p.name,role:p.role,passwordChangeRequired:true},rows:[]});fail('Change your temporary password before using the portal.',403);}
  for(const r of all.filter(r=>r.kind==='student'))r.data=enrolment(r.data,all);if(p.role==='student')p=enrolment(p,all);
  const controls=schoolControls(all);
@@ -94,8 +95,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   if(op==='state'){
    const cutoff=new Date(Date.now()-30*86400000).toISOString().slice(0,10);
    all.push(...await allRecords('kind=eq.attendance&data->>date=gte.'+cutoff));
-   const now=new Date(),startYear=now.getUTCMonth()>=8?now.getUTCFullYear():now.getUTCFullYear()-1;
-   all.push(...await allRecords('kind=eq.mark&data->>year=eq.'+enc(startYear+'/'+(startYear+1))));
+   all.push(...await allRecords('kind=eq.mark&data->>year=eq.'+enc(controls.activeYear)));
    all.push(...await allRecords('kind=eq.submission&data->>updatedAt=gte.'+cutoff));
   }else if(b.id&&!all.some(r=>r.id===b.id)){
    if(!/^[0-9a-f-]{36}$/.test(b.id))fail('Invalid record ID.');all.push(...await allRecords('id=eq.'+b.id));
@@ -238,6 +238,30 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   return res.json({rows:kept,more:batch.length===size,skipped:batch.length-kept.length});
  }
  if(op==='audit'){if(p.role!=='principal')fail('Principal access required.',403);return res.json({rows:await db('school_audit?order=created_at.desc&limit=200')});}
+
+
+ if(op==='accounts'){
+  if(p.role!=='principal')fail('Principal access required.',403);
+  const users=new Map();for(let page=1;page<=50;page++){
+   const response=await fetch(`${base()}/auth/v1/admin/users?page=${page}&per_page=1000`,{headers:{apikey:key(),Authorization:`Bearer ${key()}`}});
+   if(!response.ok)fail('The login list could not be loaded. Try again.',503);const result=await response.json();for(const user of result.users||[])users.set(user.id,user);if((result.users||[]).length<1000)break;
+  }
+  return res.json({rows:all.filter(r=>['profile','student'].includes(r.kind)).map(r=>{const u=users.get(r.data.authId);return {...r,data:{...r.data,loginEmail:u?.email||r.data.loginEmail||'',loginExists:!!u,lastSignIn:u?.last_sign_in_at||''}};})});
+ }
+ if(op==='reset-login'){
+  if(p.role!=='principal')fail('Principal access required.',403);
+  const target=all.find(r=>r.id===b.recordId&&['profile','student'].includes(r.kind));
+  if(!target?.data.authId)fail('Choose a person with an existing login.');
+  if(target.id===p.id)fail('Use Change password for your own account.');
+  if(target.data.active===false||['graduated','dismissed','transferred out'].includes(target.data.status))fail('Activate this school record before resetting its login.');
+  if(b.version!==target.version)fail('Account changed. Refresh before resetting.',409);
+  const password='Ghs!'+crypto.randomBytes(18).toString('base64url');
+  // Persist the session barrier first. A provider failure leaves access blocked until the principal retries.
+  await db('rpc/school_save_record','POST',{record_kind:target.kind,record_data:{...target.data,authEpoch:(target.data.authEpoch||0)+1,passwordChangeRequired:true,passwordResetAt:new Date().toISOString(),passwordResetBy:p.id},actor_id:p.id,record_id:target.id,expected_version:target.version});
+  const response=await fetch(`${base()}/auth/v1/admin/users/${encodeURIComponent(target.data.authId)}`,{method:'PUT',headers:{apikey:key(),Authorization:`Bearer ${key()}`,'Content-Type':'application/json'},body:JSON.stringify({password})});
+  if(!response.ok)fail('Password reset was not completed. Refresh the account list and retry. Previous school sessions have been blocked.',503);
+  const user=await response.json();const email=user.email||user.user?.email||target.data.loginEmail||'';return res.json({ok:true,credential:{name:target.data.name,username:target.data.username||'',email:email.endsWith('@accounts.ghs-mbonjo.invalid')?'':email,temporaryPassword:password}});
+ }
  if(op==='provision'){
   if(p.role!=='principal')fail('Principal access required.',403);
   const target=all.find(r=>r.id===(b.recordId||b.profileId));if(!target||!canProvision(target))fail('Choose an active account without an existing login.');
@@ -285,7 +309,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   if(kind==='school_control')fail('Use the school controls on the Home page.',403);
   if(kind==='mark'&&!markSaveAllowed(controls,d,old,p))fail('Mark entry is closed for this year or assessment. Ask the principal or vice-principal to open it.',403);
   if(p.role!=='principal'&&['student','assignment'].includes(kind)){const k=kind==='student'?'academicYear':'year';if(d[k]&&d[k]!==old?.data[k]&&d[k]!==controls.activeYear)fail('Only the principal can select another academic year.',403);}
-  if(['profile','student'].includes(kind)){for(const field of ['authId','username','loginEmail','passwordChangeRequired']){if(old&&field in old.data)d[field]=old.data[field];else delete d[field];}}
+  if(['profile','student'].includes(kind)){for(const field of ['authId','username','loginEmail','passwordChangeRequired','authEpoch','passwordResetAt','passwordResetBy']){if(old&&field in old.data)d[field]=old.data[field];else delete d[field];}}
   if(kind==='exam_attempt')fail('Use the timed assessment workflow.');if(kind==='timetable')fail('Use the timetable generator to validate conflicts.');if(!canWrite(p,kind,d,old,all))fail('Your role cannot make this change.',403);
   if(kind==='profile'&&p.role!=='principal'){const allowed=['name','photo','bio','birthDate','birthPlace','gender','publicServiceDate','schoolAssumptionDate','rank','salaryIndex','phone','whatsapp'];d={...old.data,...Object.fromEntries(Object.entries(d).filter(([k])=>allowed.includes(k)))};}
   if(kind==='profile'&&p.role==='principal'){if(!roles.includes(d.role))fail('Invalid staff role.');if(d.role==='bursar'&&d.active!==false&&all.some(r=>r.kind==='profile'&&r.id!==old?.id&&r.data.role==='bursar'&&r.data.active!==false))fail('There is already an active bursar. End the existing appointment before assigning another.',409);if(old?.data.role==='principal'&&(d.role!=='principal'||d.active===false)&&all.filter(r=>r.kind==='profile'&&r.data.role==='principal'&&r.data.active!==false).length<=1)fail('The last active principal cannot be removed.');}
@@ -313,5 +337,6 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
  }
  fail('Unknown action.');
  }catch(e){res.status(e.status||500).json({error:e.status?e.message:'The request could not be completed. Please try again.'});}}
+
 
 
