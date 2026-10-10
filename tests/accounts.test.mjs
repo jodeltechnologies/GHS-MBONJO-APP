@@ -1,0 +1,33 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import handler from '../api/school.js';
+import {accountUsername,canProvision} from '../src/accounts.js';
+import {studentsInYear,availableAcademicYears} from '../src/academics.js';
+const principal={id:'11111111-1111-4111-8111-111111111111',kind:'profile',version:1,data:{name:'Principal',role:'principal',active:true,authId:'owner'}};
+const student={id:'22222222-2222-4222-8222-222222222222',kind:'student',version:1,data:{name:'Alex Student',class:'Form 1A',matricule:'123456',status:'active'}};
+process.env.SUPABASE_URL='https://database.test';process.env.SUPABASE_SERVICE_ROLE_KEY='test-key';process.env.SESSION_SECRET='test-secret-with-at-least-32-characters';process.env.APP_ORIGIN='https://school.test';
+function cookie(payload){const value=Buffer.from(JSON.stringify({...payload,exp:Date.now()+100000})).toString('base64url');return 'school_session='+value+'.'+crypto.createHmac('sha256',process.env.SESSION_SECRET).update(value).digest('base64url');}
+async function request(body,payload,records=[principal,student]){
+ const calls=[];globalThis.fetch=async(url,opts={})=>{calls.push({url,opts});let data;
+ if(url.includes('school_rate_limit'))data=1;
+ else if(url.includes('/auth/v1/token'))data={user:{id:'student-auth'},access_token:'access'};
+ else if(url.includes('/auth/v1/admin/users'))data={id:'new-auth'};
+ else if(url.includes('/auth/v1/user'))data={id:payload?.authId||'owner'};
+ else if(url.includes('school_save_record'))data=[{...student,data:JSON.parse(opts.body).record_data}];
+ else if(url.includes('data->>username'))data=records.filter(r=>r.data.username===body.email);
+ else if(url.includes('data->>authId'))data=records.filter(r=>r.data.authId==='student-auth');
+ else if(url.includes('data->>matricule'))data=[records.find(r=>r.kind==='student')];
+ else data=records;
+ return {ok:true,status:200,json:async()=>data};};
+ const res={headers:{},statusCode:200,setHeader(k,v){this.headers[k]=v;},status(n){this.statusCode=n;return this;},json(v){this.body=v;return this;}};
+ await handler({method:'POST',headers:{origin:'https://school.test',cookie:payload?cookie(payload):''},body},res);return {res,calls};
+}
+test('duplicate names get different assigned usernames',()=>{const b={...student,id:'33333333-3333-4333-8333-333333333333'};assert.notEqual(accountUsername(student,[student,b]),accountUsername(b,[student,b]));assert.equal(canProvision({...student,data:{...student.data,authId:'exists'}}),false);});
+test('student passwords are generated and never saved in the student record',async()=>{const {res,calls}=await request({op:'provision',recordId:student.id},{authId:'owner',accessToken:'owner-token'});assert.equal(res.statusCode,200);assert.ok(res.body.credential.temporaryPassword.length>=24);const saved=JSON.parse(calls.find(c=>c.url.includes('school_save_record')).opts.body);assert.equal(saved.record_kind,'student');assert.equal(saved.record_data.passwordChangeRequired,true);assert.ok(!JSON.stringify(saved).includes(res.body.credential.temporaryPassword));});
+test('non-principals cannot provision logins',async()=>{const teacher={...principal,data:{...principal.data,role:'teacher'}};const {res,calls}=await request({op:'provision',recordId:student.id},{authId:'owner',accessToken:'owner-token'},[teacher,student]);assert.equal(res.statusCode,403);assert.ok(!calls.some(c=>c.url.includes('/admin/users')));});
+test('student username login gets a validated auth session',async()=>{const record={...student,data:{...student.data,authId:'student-auth',username:'alex',loginEmail:'internal@example.invalid'}};const {res}=await request({op:'login',email:'alex',password:'temporary-password'},null,[principal,record]);assert.equal(res.statusCode,200);assert.ok(res.headers['Set-Cookie']);});
+test('DOB login cannot bypass a provisioned password account',async()=>{const record={...student,data:{...student.data,authId:'student-auth',birthDate:'2010-01-01'}};const {res}=await request({op:'login',mode:'student',matricule:'123456',birthDate:'2010-01-01'},null,[principal,record]);assert.equal(res.statusCode,401);});
+test('temporary password session sees no records and cannot use other operations',async()=>{const record={...student,data:{...student.data,authId:'student-auth',passwordChangeRequired:true}};const payload={studentId:student.id,authId:'student-auth',accessToken:'access'};const state=await request({op:'state'},payload,[principal,record]);assert.deepEqual(state.res.body.rows,[]);assert.equal(state.res.body.profile.passwordChangeRequired,true);const denied=await request({op:'reports'},payload,[principal,record]);assert.equal(denied.res.statusCode,403);});
+test('password changes clear the mandatory flag and end the session',async()=>{const record={...student,data:{...student.data,authId:'student-auth',passwordChangeRequired:true}};const {res,calls}=await request({op:'password',password:'new-personal-password'},{studentId:student.id,authId:'student-auth',accessToken:'access'},[principal,record]);assert.equal(res.statusCode,200);const saved=JSON.parse(calls.find(c=>c.url.includes('school_save_record')).opts.body);assert.equal(saved.record_data.passwordChangeRequired,false);assert.match(res.headers['Set-Cookie'],/Max-Age=0/);});
+test('academic years keep historical classes separate',()=>{const record={...student,data:{...student.data,academicYear:'2026/2027',class:'Form 2A',enrolments:{'2025/2026':{class:'Form 1A',status:'active'}}}};assert.equal(studentsInYear([record],'2025/2026')[0].data.class,'Form 1A');assert.equal(studentsInYear([record],'2026/2027')[0].data.class,'Form 2A');assert.equal(studentsInYear([record],'2024/2025').length,0);assert.ok(availableAcademicYears([record]).includes('2025/2026'));});
