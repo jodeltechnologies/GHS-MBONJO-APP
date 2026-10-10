@@ -22,3 +22,6 @@ export function markSaveAllowed(controls,d,old,p){
  const fields=['studentId','class','subject','assessment','year','mark','coefficient','grade','remark'];
  return ['principal','vp'].includes(p.role)&&!!old&&fields.every(k=>String(d[k]??'')===String(old.data[k]??''))&&['draft','pending','published','rejected'].includes(d.status);
 }
+
+
+export function yearChoices(current,recorded=[]){const start=+current.slice(0,4),choices=new Set([current,...recorded]);for(let i=1;i<=3;i++)choices.add(`${start+i}/${start+i+1}`);return [...choices].filter(validYear).sort();}
