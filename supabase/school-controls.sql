@@ -1,0 +1,2 @@
+ALTER TABLE public.school_records DROP CONSTRAINT school_records_kind_check; ALTER TABLE public.school_records ADD CONSTRAINT school_records_kind_check CHECK (kind IN ('profile','student','assignment','resource','submission','attendance','mark','event','post','gallery','textbook','document','timetable','document_request','classroom','subject','exam_attempt','dept_document','dept_item','message','progression','school_control'));
+-- A single shared control record is initialized during setup. Existing pupil and staff data is unchanged.
