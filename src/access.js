@@ -1,9 +1,10 @@
+import {academicYear} from './academics.js';
 import {requestingStaff} from './document-requests.js';
 import {studies} from './domain.js';
 export const admin=p=>['principal','vp'].includes(p.role);
 export const teacher=p=>['teacher','hod'].includes(p.role);
 export const staff=p=>!['student','parent'].includes(p.role);
-export const assigned=(p,d,all)=>all.some(r=>r.kind==='assignment'&&r.data.teacherId===p.id&&r.data.class===d.class&&(!d.subject||r.data.subject===d.subject));
+export const assigned=(p,d,all)=>all.some(r=>{if(r.kind!=='assignment'||r.data.teacherId!==p.id||d.subject&&r.data.subject!==d.subject)return false;const year=r.data.year||academicYear();if(d.year)return year===d.year&&r.data.class===d.class;if(d.enrolments?.[year])return r.data.class===d.enrolments[year].class;return year===(d.academicYear||d.sourceYear?.replace('-','/')||academicYear())&&r.data.class===d.class;});
 // Departmental records sit in front of the principal's blanket read, because for
 // these the principal is not automatically entitled. A department's papers reach
 // the administration when the head of department transmits them and not before,
@@ -62,3 +63,4 @@ export function canWrite(p,kind,d,old,all){
  if(kind==='submission')return p.role==='student'&&(!old||old.data.studentId===p.id)&&all.some(r=>r.kind==='resource'&&r.id===d.resourceId&&r.data.class===p.class&&studies(p,r.data.subject)&&r.data.status==='published'&&r.data.submissionMode==='online')||teacher(p)&&old&&all.some(r=>r.kind==='resource'&&r.id===old.data.resourceId&&r.data.ownerId===p.id);
  return false;
 }
+

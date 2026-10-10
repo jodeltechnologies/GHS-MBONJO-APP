@@ -23,3 +23,13 @@ export function studentsInYear(records, year) {
   return [];
  });
 }
+export function classStream(cls,records){
+ if(/ Sixth Arts/.test(cls))return 'Arts';if(/ Sixth Science/.test(cls))return 'Science';
+ return records.find(r=>r.kind==='classroom'&&r.data.name===cls)?.data.stream||'Unspecified';
+}
+export function classRoster(records,{year,stream='',cls='',studentId=''}={}){
+ return studentsInYear(records,year).filter(r=>(!stream||classStream(r.data.class,records)===stream)&&(!cls||r.data.class===cls)&&(!studentId||r.id===studentId)).sort((a,b)=>a.data.class.localeCompare(b.data.class,undefined,{numeric:true})||a.data.name.localeCompare(b.data.name));
+}
+export function assignmentsInYear(records,year,current=academicYear()){
+ return records.filter(r=>r.kind==='assignment'&&(r.data.year===year||!r.data.year&&year===current));
+}
