@@ -12,7 +12,7 @@ import {writingInstruction,cleanGeneratedText} from '../src/writing-style.js';
 import crypto from 'node:crypto';
 import {attestationText,classes,classesInLevel,roles,normalizeMatricule,normalizeBirthDate,validateRecord,generateTimetable,normalizePreferences,studies} from '../src/domain.js';
 import {canRead,canWrite,admin,assigned,staff} from '../src/access.js';
-import {schoolAnalytics} from '../src/analytics.js';
+import {schoolAnalytics,attendanceOverview,scopeAttendance} from '../src/analytics.js';
 const base=()=>process.env.SUPABASE_URL?.replace(/\/$/,''),key=()=>process.env.SUPABASE_SERVICE_ROLE_KEY;
 const fail=(message,status=400)=>{throw Object.assign(Error(message),{status})};
 async function db(path,method='GET',body){const r=await fetch(`${base()}/rest/v1/${path}`,{method,headers:{apikey:key(),Authorization:`Bearer ${key()}`,'Content-Type':'application/json',Prefer:'return=representation'},body:body===undefined?undefined:JSON.stringify(body)});const data=await r.json().catch(()=>null);if(!r.ok&&data?.code==='40001')fail('Record changed. Refresh before saving.',409);if(!r.ok)fail(r.status===409?'Duplicate record. Check matricule, reference, or assessment.':'Database operation failed. Verify setup or retry.',r.status===409?409:503);return data;}
@@ -150,8 +150,15 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   const answers=acceptAnswers(a.data,b.answers||{},now),expired=now>=Date.parse(a.data.deadline);const data={...a.data,answers,savedAt:new Date(now).toISOString()};if(op==='exam-submit'||expired){Object.assign(data,gradeAttempt(data.questions,answers),{status:'submitted',submittedAt:new Date(now).toISOString()});}
   const result=await db('rpc/school_save_record','POST',{record_kind:'exam_attempt',record_data:data,actor_id:p.id,record_id:a.id,expected_version:a.version});return res.json({row:redact(p,result[0]),serverNow:new Date(now).toISOString()});
  }
+ if(op==='attendance-register'){
+  const assignment=all.find(r=>r.kind==='assignment'&&r.id===b.assignmentId);
+  if(!assignment||(assignment.data.year||academicYear())!==controls.activeYear||!(['principal','vp','discipline'].includes(p.role)||['teacher','hod'].includes(p.role)&&assignment.data.teacherId===p.id))fail('Choose a lesson assigned to you for this academic year.',403);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(b.date||'')||!Number.isFinite(Date.parse(b.date)))fail('Choose a valid attendance date.');
+  const found=await allRecords('kind=eq.attendance&data->>assignmentId=eq.'+enc(assignment.id)+'&data->>date=eq.'+enc(b.date));
+  return res.json({rows:found});
+ }
  if(op==='analytics'){
-  if(!['principal','vp','teacher','hod','discipline'].includes(p.role))fail('Staff access is required for analytics.',403);
+  const overview=attendanceOverview(p),summaryOnly=overview&&p.role==='staff';if(!overview&&!['teacher','hod'].includes(p.role))fail('Staff access is required for analytics.',403);const year=controls.activeYear;
   const iso=v=>/^\d{4}-\d{2}-\d{2}$/.test(v||'')&&Number.isFinite(Date.parse(v));
   if(!iso(b.from)||!iso(b.to))fail('Choose a start and end date.');
   if(b.to<b.from)fail('The end date comes before the start date.');
@@ -161,17 +168,16 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   // Everything is filtered through the same read rules as anywhere else, so a
   // teacher's figures are built only from the classes they are assigned to, and
   // only aggregates ever leave the server — never the underlying records.
-  const attendance=(await allRecords('kind=eq.attendance&data->>date=gte.'+enc(b.from)+'&data->>date=lte.'+enc(b.to)))
-   .filter(r=>canRead(p,r,all)&&(!b.class||r.data.class===b.class));
-  const marks=b.year?(await allRecords('kind=eq.mark&data->>year=eq.'+enc(b.year)+(b.class?'&data->>class=eq.'+enc(b.class):'')))
-   .filter(r=>canRead(p,r,all)):[];
-  const timetable=(await allRecords('kind=eq.timetable')).filter(r=>canRead(p,r,all));
+  const attendance=scopeAttendance(await allRecords('kind=eq.attendance&data->>date=gte.'+enc(b.from)+'&data->>date=lte.'+enc(b.to)),{year,assignments:all.filter(r=>r.kind==='assignment'),overview,teacherId:p.id,cls:b.class||'',subject:b.subject||''});
+  const marks=!summaryOnly&&b.year?(await allRecords('kind=eq.mark&data->>year=eq.'+enc(b.year)+(b.class?'&data->>class=eq.'+enc(b.class):'')))
+   .filter(r=>canRead(p,r,all)&&(!b.subject||r.data.subject===b.subject)):[];
+  const timetable=(await allRecords('kind=eq.timetable')).filter(r=>canRead(p,r,all)&&(r.data.year||academicYear())===year);
   const entries=timetable.flatMap(r=>r.data.entries||[])
-   .filter(e=>!b.class||e.class===b.class)
-   .filter(e=>admin(p)||p.role==='discipline'||all.some(a=>a.kind==='assignment'&&a.data.teacherId===p.id&&a.data.class===e.class&&a.data.subject===e.subject));
-  const students=all.filter(r=>r.kind==='student'&&canRead(p,r,all)&&(!b.class||r.data.class===b.class))
-   .map(r=>({id:r.id,data:{name:r.data.name,class:r.data.class,gender:r.data.gender}}));
-  const assignments=all.filter(r=>r.kind==='assignment'&&(admin(p)||p.role==='discipline'||r.data.teacherId===p.id))
+   .filter(e=>(!b.class||e.class===b.class)&&(!b.subject||e.subject===b.subject))
+   .filter(e=>overview||all.some(a=>a.kind==='assignment'&&(a.data.year||academicYear())===year&&a.data.teacherId===p.id&&a.data.class===e.class&&a.data.subject===e.subject));
+  const students=studentsInYear(all,year).filter(r=>(overview||canRead(p,r,all))&&(!b.class||r.data.class===b.class))
+   .map(r=>({id:r.id,data:{name:summaryOnly?'':r.data.name,class:r.data.class,gender:r.data.gender}}));
+  const assignments=assignmentsInYear(all,year).filter(r=>(overview||r.data.teacherId===p.id)&&(!b.class||r.data.class===b.class)&&(!b.subject||r.data.subject===b.subject))
    .map(r=>({id:r.id,data:r.data}));
   const staff=new Map(all.filter(r=>r.kind==='profile').map(r=>[r.id,r.data.name]));
   const report=schoolAnalytics({
@@ -181,7 +187,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
    watchBelow:Math.min(100,Math.max(1,Math.round(Number(b.watchBelow))||80)),
    minLessons:Math.min(100,Math.max(1,Math.round(Number(b.minLessons))||5)),
    nameFor:id=>staff.get(id)||''});
-  return res.json({report,scope:admin(p)?'school':p.role==='discipline'?'attendance':'own classes'});
+  if(summaryOnly)report.attendance.watchlist=[];report.range.subject=b.subject||'';return res.json({report,scope:overview?'school attendance':'own subjects and classes',summaryOnly});
  }
  if(op==='messages'){
   if(!staff(p))fail('Staff access required.',403);

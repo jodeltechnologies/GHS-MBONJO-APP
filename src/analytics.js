@@ -16,6 +16,7 @@
 //     which nobody anywhere took a roll call is not counted as a school day, so
 //     holidays and strike days do not quietly ruin the coverage figures.
 
+import {academicYear} from './academics.js';
 import {timetableDays,timetablePeriods,periodSpan} from './domain.js';
 
 export const attendanceStatuses=['present','late','absent','excused'];
@@ -70,6 +71,8 @@ export function attendanceReport(records,{students=[],timetableEntries=[],from='
  const summarise=(m,extra=()=>({}))=>[...m].map(([key,list])=>({key,...tally(list),...extra(key,list)}));
 
  const byClass=summarise(group(r=>r.class)).sort((a,b)=>String(a.key).localeCompare(String(b.key)));
+ const bySubject=summarise(group(r=>r.subject||'Unspecified')).sort((a,b)=>String(a.key).localeCompare(String(b.key)));
+ const byClassSubject=summarise(group(r=>JSON.stringify([r.class,r.subject||'Unspecified'])),(key)=>{const [cls,subject]=JSON.parse(key);return {class:cls,subject};}).sort((a,b)=>String(a.class).localeCompare(String(b.class))||String(a.subject).localeCompare(String(b.subject)));
  const byWeek=summarise(group(r=>weekStart(r.date))).sort((a,b)=>String(a.key).localeCompare(String(b.key)));
  const byWeekday=timetableDays.map(day=>{
   const list=rows.filter(r=>isoDay(r.date)===day);
@@ -118,7 +121,7 @@ export function attendanceReport(records,{students=[],timetableEntries=[],from='
   .sort((a,b)=>a.rate-b.rate||b.absent-a.absent||String(a.name).localeCompare(String(b.name)));
 
  return {
-  overall,byClass,byWeek,byWeekday,byPeriod,byGender,watchlist,
+  overall,byClass,bySubject,byClassSubject,byWeek,byWeekday,byPeriod,byGender,watchlist,
   students:perStudent.length,
   days:[...new Set(rows.map(r=>r.date))].length,
   watchBelow,minLessons};
@@ -252,4 +255,12 @@ export function schoolAnalytics({attendance=[],marks=[],students=[],assignments=
   attendance:attendanceReport(attendance,{students,timetableEntries,from,to,watchBelow,minLessons}),
   results:resultsReport(marks,{year,assessment,students}),
   coverage:coverageReport(attendance,timetableEntries,{from,to,assignments,nameFor})};
+}
+
+
+// Overview access is limited to school administration. Other staff retain their existing access.
+export const attendanceOverview=p=>['principal','vp','discipline'].includes(p.role)||(p.role==='staff'&&['staff','bursar','secretary','stores_accountant','guidance_counsellor','ict_coordinator'].includes(p.post||p.role));
+export function scopeAttendance(records,{year,assignments=[],overview=false,teacherId='',cls='',subject=''}={}){
+ const lookup=new Map(assignments.map(r=>[r.id,r.data]));
+ return records.flatMap(r=>{const a=lookup.get(r.data.assignmentId);const actualYear=r.data.year||(a?(a.year||academicYear()):'');if(actualYear!==year)return [];const d={...r.data,subject:r.data.subject||a?.subject||'Unspecified'};if(cls&&d.class!==cls||subject&&d.subject!==subject)return [];if(!overview&&(!a||a.teacherId!==teacherId||a.class!==d.class||a.subject!==d.subject))return [];return [{...r,data:d}];});
 }

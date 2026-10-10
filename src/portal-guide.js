@@ -1,11 +1,12 @@
 export function primaryTasks(role){
- if(role==='principal')return ['students','staff','marks','requests','academics','assignments'];
- if(role==='vp')return ['students','marks','assignments','attendance','timetable','academics'];
- if(['teacher','hod'].includes(role))return ['students','attendance','marks','timetable'];
+ if(role==='principal')return ['students','staff','marks','requests','analytics','academics','assignments'];
+ if(role==='vp')return ['students','marks','assignments','attendance','analytics','timetable','academics'];
+ if(['teacher','hod'].includes(role))return ['students','attendance','marks','timetable','analytics'];
  if(role==='discipline')return ['attendance','students','analytics','timetable'];
  if(role==='student')return ['resources','marks','timetable','profile'];
  if(role==='parent')return ['marks','attendance','timetable'];
  if(role==='content_creator')return ['publishing','profile'];
+ if(role==='staff')return ['analytics','requests','documents','profile'];
  return ['requests','documents','profile','timetable'];
 }
 export const taskGuides={students:['Class lists','Choose a stream and class to see the whole list.','Listes de classe','Choisissez une filière et une classe pour afficher la liste complète.'],attendance:['Take attendance','Choose your lesson, mark each student, then save.','Faire l’appel','Choisissez le cours, indiquez les présences, puis enregistrez.'],marks:['Marks and report cards','Enter marks when entry is open, or view saved results.','Notes et bulletins','Saisissez les notes lorsque la saisie est ouverte ou consultez les résultats.'],timetable:['View timetable','Find the lessons for your class or teacher.','Voir l’emploi du temps','Consultez les cours par classe ou enseignant.'],staff:['Staff accounts','Manage staff roles and create temporary passwords.','Comptes du personnel','Gérez les fonctions et créez des mots de passe temporaires.'],requests:['Document requests','Send or review requests for school documents.','Demandes de documents','Envoyez ou examinez les demandes de documents scolaires.'],academics:['Classes and subjects','Manage classes and their compulsory subjects.','Classes et matières','Gérez les classes et leurs matières obligatoires.'],assignments:['Assign teachers','Choose who teaches each subject in each class.','Affecter les enseignants','Choisissez les enseignants par matière et classe.'],resources:['Lessons and homework','Open learning materials and submit your work.','Cours et devoirs','Consultez les ressources et remettez votre travail.'],profile:['My profile','Check your personal details and account.','Mon profil','Vérifiez vos informations personnelles et votre compte.'],publishing:['School news','Prepare school news, events and photographs.','Actualités du lycée','Préparez les actualités, événements et photos.'],analytics:['School summaries','View attendance and results in simple summaries.','Bilans scolaires','Consultez les bilans des présences et des résultats.'],documents:['School documents','View and print your school documents.','Documents scolaires','Consultez et imprimez vos documents.']};
