@@ -149,7 +149,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
  if(op==='import-students'){
   if(p.role!=='principal')fail('Principal access required.',403);
   if(!Number.isInteger(b.offset)||b.offset<0)fail('Invalid import position.');const batch=bundledStudents.slice(b.offset,b.offset+10);let imported=0,skipped=0;const conflicts=[];
-  for(const data of batch){const existing=all.find(r=>r.kind==='student'&&r.data.matricule===normalizeMatricule(data.matricule));if(!data.matricule){conflicts.push({data,reason:'Missing matricule. Enter the correct school identifier before creating this account.'});continue;}if(existing){if(existing.data.name.trim().toUpperCase()!==data.name.trim().toUpperCase())conflicts.push({data,reason:'This matricule belongs to a different existing name. Review the school register.'});else skipped++;continue;}validateRecord('student',data,classNames);await db('rpc/school_save_record','POST',{record_kind:'student',record_data:data,actor_id:p.id});all.push({kind:'student',data});imported++;}
+  for(const source of batch){const data={...source,name:String(source.name||'').trim().toUpperCase()};const existing=all.find(r=>r.kind==='student'&&r.data.matricule===normalizeMatricule(data.matricule));if(!data.matricule){conflicts.push({data,reason:'Missing matricule. Enter the correct school identifier before creating this account.'});continue;}if(existing){if(existing.data.name.trim().toUpperCase()!==data.name.trim().toUpperCase())conflicts.push({data,reason:'This matricule belongs to a different existing name. Review the school register.'});else skipped++;continue;}validateRecord('student',data,classNames);await db('rpc/school_save_record','POST',{record_kind:'student',record_data:data,actor_id:p.id});all.push({kind:'student',data});imported++;}
   return res.json({imported,skipped,conflicts,next:b.offset+batch.length,total:bundledStudents.length,more:b.offset+batch.length<bundledStudents.length});
  }
  if(['exam-start','exam-save','exam-submit','exam-review'].includes(op)){
@@ -305,7 +305,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   return res.json({row:result[0]});
  }
  if(op==='save'){
-  const kind=b.kind,old=b.id?all.find(r=>r.id===b.id&&r.kind===kind):null;if(b.id&&!old)fail('Record not found.',404);let d={...b.data};if(kind==='attendance')d.year=controls.activeYear;
+  const kind=b.kind,old=b.id?all.find(r=>r.id===b.id&&r.kind===kind):null;if(b.id&&!old)fail('Record not found.',404);let d={...b.data};if(['profile','student'].includes(kind)&&typeof d.name==='string')d.name=d.name.trim().toUpperCase();if(kind==='attendance')d.year=controls.activeYear;
   if(kind==='school_control')fail('Use the school controls on the Home page.',403);
   if(kind==='mark'&&!markSaveAllowed(controls,d,old,p))fail('Mark entry is closed for this year or assessment. Ask the principal or vice-principal to open it.',403);
   if(p.role!=='principal'&&['student','assignment'].includes(kind)){const k=kind==='student'?'academicYear':'year';if(d[k]&&d[k]!==old?.data[k]&&d[k]!==controls.activeYear)fail('Only the principal can select another academic year.',403);}
