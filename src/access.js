@@ -15,7 +15,7 @@ export const assigned=(p,d,all)=>all.some(r=>{if(r.kind!=='assignment'||r.data.t
 // messages page rather than implying a privacy it cannot provide.
 export const sameDepartment=(p,d)=>!!p.department&&!!d.department&&p.department===d.department;
 export const inThread=(p,d)=>d.fromId===p.id||d.toId===p.id||(d.scope==='department'&&sameDepartment(p,d));
-export function canRead(p,r,all){const d=r.data;
+export function canRead(p,r,all){const d=r.data;if(r.kind==='school_control')return true;
  if(r.kind==='message')return staff(p)&&inThread(p,d);
  if(r.kind==='dept_document')return staff(p)&&(sameDepartment(p,d)||(admin(p)&&d.transmitted===true));
  if(p.role==='principal')return true;
@@ -37,6 +37,7 @@ export function canRead(p,r,all){const d=r.data;
  return false;
 }
 export function canWrite(p,kind,d,old,all){
+ if(kind==='school_control')return false;
  // Departmental writes come before the principal's blanket allow, for the same
  // reason the reads do: these belong to the department, and the principal writing
  // a department's minutes or someone else's message would be a forgery.
