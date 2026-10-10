@@ -7,3 +7,19 @@ export function availableSubjects(all){const map=new Map(subjectCatalogue.map(s=
 export function recommendSubjects(stream){const shared=['English Language','French','Mathematics','Computer Science','Citizenship','Physical Education','Manual Labour'];if(stream==='Arts')return [...shared,'History','Geography','Economics','Literature in English','Commerce'];if(stream==='Science')return [...shared,'Physics','Chemistry','Biology'];return [...shared,'History','Geography','Biology','Physics','Chemistry'];}
 export function academicYear(date=new Date()){const n=date.getUTCFullYear()-(date.getUTCMonth()<8?1:0);return n+'/'+(n+1);}
 export function competency(mark){if(mark===null||mark===undefined)return '';return mark>=18?'A+/E':mark>=15?'CA':mark>=11?'CECA':'CNA';}
+
+export function availableAcademicYears(records, current=academicYear()) {
+ const years=new Set([current]);
+ const start=+current.slice(0,4);for(let i=1;i<=5;i++)years.add(`${start-i}/${start-i+1}`);
+ for(const r of records){for(const value of [r.data.academicYear,r.data.sourceYear?.replace('-','/'),r.data.year,...Object.keys(r.data.enrolments||{})])if(/^\d{4}\/\d{4}$/.test(value||''))years.add(value);}
+ return [...years].sort().reverse();
+}
+export function studentsInYear(records, year) {
+ return records.filter(r=>r.kind==='student').flatMap(r=>{
+  const d=r.data,entry=d.enrolments?.[year];
+  if(entry)return [{...r,data:{...d,...entry}}];
+  const recorded=d.academicYear||d.sourceYear?.replace('-','/');
+  if(recorded===year||year==='unassigned'&&!recorded&&!Object.keys(d.enrolments||{}).length)return [r];
+  return [];
+ });
+}

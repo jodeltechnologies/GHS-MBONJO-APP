@@ -1,7 +1,8 @@
+import {accountUsername,accountEmail,canProvision,normalizeUsername} from '../src/accounts.js';
 import bundledStudents from './data/students.json' with {type:'json'};
 import progressionSheets from './data/progression.json' with {type:'json'};
 import {validateQuestions,publicQuestions,gradeAttempt,acceptAnswers} from '../src/exams.js';
-import {enrolment,availableSubjects,academicYear} from '../src/academics.js';
+import {enrolment,availableSubjects,academicYear,studentsInYear} from '../src/academics.js';
 import {classReport,assessmentsIn,streamAverage} from '../src/reports.js';
 import {providers,chooseModel} from '../src/providers.js';
 import {trustedOrigin} from '../src/origin.js';
@@ -41,20 +42,33 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
    const m=normalizeMatricule(b.matricule);const dob=normalizeBirthDate(b.birthDate);
    if(!/^[A-Z0-9]{5,25}$/.test(m)||!dob)fail('Invalid login.',401);
    const rows=await db(`school_records?kind=eq.student&data->>matricule=eq.${encodeURIComponent(m)}`);const r=rows[0];
-   if(!r||['dismissed','transferred out'].includes(r.data.status))fail('Invalid login.',401);
+   if(!r||r.data.authId||['dismissed','transferred out'].includes(r.data.status))fail('Invalid login.',401);
    const stored=normalizeBirthDate(r.data.birthDate);
    if(!stored)fail('Your school record has no date of birth yet. Ask the school administration to complete it.',403);
    if(stored!==dob)fail('Invalid login.',401);
    issue(res,{studentId:r.id});return res.json({ok:true});
   }
-  const r=await fetch(`${base()}/auth/v1/token?grant_type=password`,{method:'POST',headers:{apikey:key(),'Content-Type':'application/json'},body:JSON.stringify({email:b.email,password:b.password})});const auth=await r.json();if(!r.ok)fail('Email or password is incorrect.',401);
-  const profiles=await db(`school_records?kind=eq.profile&data->>authId=eq.${auth.user.id}`);if(!profiles[0]||profiles[0].data.active===false)fail('Contact the principal to activate your school role.',403);issue(res,{authId:auth.user.id,accessToken:auth.access_token});return res.json({ok:true});
+  const identifier=String(b.email||b.username||'').trim().toLowerCase();
+  let email=identifier;
+  if(!identifier.includes('@')){
+   if(!identifier||normalizeUsername(identifier)!==identifier)fail('Username or password is incorrect.',401);
+   const matches=await db(`school_records?kind=in.(profile,student)&data->>username=eq.${encodeURIComponent(identifier)}`);
+   if(matches.length!==1||!matches[0].data.loginEmail)fail('Username or password is incorrect.',401);
+   email=matches[0].data.loginEmail;
+  }
+  const r=await fetch(`${base()}/auth/v1/token?grant_type=password`,{method:'POST',headers:{apikey:key(),'Content-Type':'application/json'},body:JSON.stringify({email,password:b.password})});const auth=await r.json();if(!r.ok)fail('Username or password is incorrect.',401);
+  const accounts=await db(`school_records?kind=in.(profile,student)&data->>authId=eq.${auth.user.id}`);
+  const account=accounts.find(x=>x.kind==='profile'&&x.data.active!==false)||accounts.find(x=>x.kind==='student'&&!['dismissed','transferred out'].includes(x.data.status));
+  if(!account)fail('Contact the principal to activate your school account.',403);
+  issue(res,{authId:auth.user.id,accessToken:auth.access_token,...(account.kind==='student'?{studentId:account.id}:{})});return res.json({ok:true});
  }
  const s=session(req);if(!s)fail('Please sign in.',401);
  if(op==='backup-page'&&s.studentId)fail('Only the principal can export school records.',403);
  const all=await allRecords(op==='backup-page'?'kind=eq.profile':'kind=in.(profile,student,assignment,classroom,subject)');let p;
- if(s.studentId){const r=all.find(r=>r.id===s.studentId&&r.kind==='student');if(!r||['dismissed','transferred out'].includes(r.data.status))fail('Account inactive.',401);p={...r.data,id:r.id,role:'student'};}
- else {const auth=await fetch(`${base()}/auth/v1/user`,{headers:{apikey:key(),Authorization:`Bearer ${s.accessToken}`}});if(!auth.ok)fail('Session expired. Please sign in again.',401);const r=all.find(r=>r.kind==='profile'&&r.data.authId===s.authId&&r.data.active!==false);if(!r)fail('Account inactive.',403);p={...r.data,id:r.id,post:r.data.role,role:effectiveRole(r.data.role)};}
+ if(s.accessToken){const auth=await fetch(`${base()}/auth/v1/user`,{headers:{apikey:key(),Authorization:`Bearer ${s.accessToken}`}});if(!auth.ok)fail('Session expired. Please sign in again.',401);const user=await auth.json();if(user.id!==s.authId)fail('Session expired.',401);}
+ if(s.studentId){const r=all.find(r=>r.id===s.studentId&&r.kind==='student');if(!r||(r.data.authId&&(!s.accessToken||r.data.authId!==s.authId))||['dismissed','transferred out'].includes(r.data.status))fail('Account inactive.',401);p={...r.data,id:r.id,role:'student'};}
+ else {const r=all.find(r=>r.kind==='profile'&&r.data.authId===s.authId&&r.data.active!==false);if(!r)fail('Account inactive.',403);p={...r.data,id:r.id,post:r.data.role,role:effectiveRole(r.data.role)};}
+ if(p.passwordChangeRequired&&op!=='password'){if(op==='state')return res.json({profile:{id:p.id,name:p.name,role:p.role,passwordChangeRequired:true},rows:[]});fail('Change your temporary password before using the portal.',403);}
  for(const r of all.filter(r=>r.kind==='student'))r.data=enrolment(r.data,all);if(p.role==='student')p=enrolment(p,all);
  const classNames=[...new Set([...classes,...all.filter(r=>r.kind==='classroom').map(r=>r.data.name)])];
  const enc=encodeURIComponent;
@@ -90,7 +104,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   // Who is on the roll: everyone registered in the class this year, plus anyone a
   // published mark names, so a student who has since left still gets their sheet.
   const rollOf=cls=>{
-   const out=b.year===academicYear()?all.filter(r=>r.kind==='student'&&r.data.class===cls):[];
+   const out=studentsInYear(all,b.year).filter(r=>r.data.class===cls);if(b.year===academicYear())out.push(...all.filter(r=>r.kind==='student'&&!r.data.academicYear&&!r.data.sourceYear&&!Object.keys(r.data.enrolments||{}).length&&r.data.class===cls));
    for(const m of marksIn(cls)){
     const r=all.find(r=>r.kind==='student'&&r.id===m.studentId);
     if(r&&!out.some(x=>x.id===r.id))out.push({...r,data:m.studentSnapshot||{...r.data,class:cls}});
@@ -127,7 +141,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   if(op==='exam-review'){if(!admin(p)&&!(p.role==='teacher'||p.role==='hod')||!admin(p)&&resource.data.ownerId!==p.id)fail('Only the assigned teacher or administration can mark this attempt.',403);if(!a||a.data.status==='in_progress')fail('Choose a submitted attempt.');const manualMax=a.data.questions.filter(q=>['short','essay'].includes(q.type)).reduce((n,q)=>n+q.points,0);if(!Number.isFinite(+b.manualScore)||+b.manualScore<0||+b.manualScore>manualMax)fail('Manual score is outside the available marks.');const data={...a.data,manualScore:+b.manualScore,score:a.data.autoScore+(+b.manualScore),feedback:String(b.feedback||'').slice(0,3000),status:'marked'};const saved=await db('rpc/school_save_record','POST',{record_kind:'exam_attempt',record_data:data,actor_id:p.id,record_id:a.id,expected_version:a.version});return res.json({row:saved[0]});}
   if(p.role!=='student'||!canRead(p,resource,all)||!resource.data.questions?.length)fail('This assessment is not available for your subjects.',403);
   const now=Date.now();
-  if(op==='exam-start'&&!a){const minutes=Number(resource.data.durationMinutes);if(!Number.isFinite(minutes)||minutes<1||minutes>180)fail('The teacher must set a duration between 1 and 180 minutes.');if(resource.data.dueDate&&now>Date.parse(resource.data.dueDate+'T23:59:59+01:00'))fail('This assessment is closed.');const data={studentId:p.id,resourceId:resource.id,title:resource.data.title,questions:validateQuestions(resource.data.questions),answers:{},startedAt:new Date(now).toISOString(),deadline:new Date(now+minutes*60000).toISOString(),status:'in_progress'};const result=await db('rpc/school_save_record','POST',{record_kind:'exam_attempt',record_data:data,actor_id:p.id});a=result[0];issue(res,{studentId:p.id},4*3600);}
+  if(op==='exam-start'&&!a){const minutes=Number(resource.data.durationMinutes);if(!Number.isFinite(minutes)||minutes<1||minutes>180)fail('The teacher must set a duration between 1 and 180 minutes.');if(resource.data.dueDate&&now>Date.parse(resource.data.dueDate+'T23:59:59+01:00'))fail('This assessment is closed.');const data={studentId:p.id,resourceId:resource.id,title:resource.data.title,questions:validateQuestions(resource.data.questions),answers:{},startedAt:new Date(now).toISOString(),deadline:new Date(now+minutes*60000).toISOString(),status:'in_progress'};const result=await db('rpc/school_save_record','POST',{record_kind:'exam_attempt',record_data:data,actor_id:p.id});a=result[0];issue(res,{...s,studentId:p.id},4*3600);}
   if(!a)fail('Start the assessment first.');if(op==='exam-start')return res.json({row:redact(p,a),serverNow:new Date(now).toISOString()});
   const answers=acceptAnswers(a.data,b.answers||{},now),expired=now>=Date.parse(a.data.deadline);const data={...a.data,answers,savedAt:new Date(now).toISOString()};if(op==='exam-submit'||expired){Object.assign(data,gradeAttempt(data.questions,answers),{status:'submitted',submittedAt:new Date(now).toISOString()});}
   const result=await db('rpc/school_save_record','POST',{record_kind:'exam_attempt',record_data:data,actor_id:p.id,record_id:a.id,expected_version:a.version});return res.json({row:redact(p,result[0]),serverNow:new Date(now).toISOString()});
@@ -203,15 +217,21 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
  if(op==='audit'){if(p.role!=='principal')fail('Principal access required.',403);return res.json({rows:await db('school_audit?order=created_at.desc&limit=200')});}
  if(op==='provision'){
   if(p.role!=='principal')fail('Principal access required.',403);
-  const target=all.find(r=>r.id===b.profileId&&r.kind==='profile');if(!target||target.data.authId)fail('Choose a staff or parent profile without an existing login.');
-  if(typeof b.password!=='string'||b.password.length<12||!/^\S+@\S+\.\S+$/.test(b.email||''))fail('Provide an email and a temporary password of at least 12 characters.');
-  const r=await fetch(`${base()}/auth/v1/admin/users`,{method:'POST',headers:{apikey:key(),Authorization:`Bearer ${key()}`,'Content-Type':'application/json'},body:JSON.stringify({email:b.email,password:b.password,email_confirm:true})});const user=await r.json();if(!r.ok)fail('Account creation failed. Check whether this email already has an account.');
-  try{await db('rpc/school_save_record','POST',{record_kind:'profile',record_data:{...target.data,authId:user.id},actor_id:p.id,record_id:target.id,expected_version:target.version});}catch(e){await fetch(`${base()}/auth/v1/admin/users/${user.id}`,{method:'DELETE',headers:{apikey:key(),Authorization:`Bearer ${key()}`}});throw e;}
-  return res.json({ok:true});
+  const target=all.find(r=>r.id===(b.recordId||b.profileId));if(!target||!canProvision(target))fail('Choose an active account without an existing login.');
+  const password=b.password||'Ghs!'+crypto.randomBytes(18).toString('base64url');
+  const username=normalizeUsername(b.username||accountUsername(target,all));
+  const email=String(b.email||accountEmail(target)).trim().toLowerCase();
+  if(password.length<12||!/^\S+@\S+\.\S+$/.test(email)||!username)fail('Provide a valid email or username and a password of at least 12 characters.');
+  if(all.some(r=>r.id!==target.id&&r.data.username===username))fail('This username is already assigned.',409);
+  const r=await fetch(`${base()}/auth/v1/admin/users`,{method:'POST',headers:{apikey:key(),Authorization:`Bearer ${key()}`,'Content-Type':'application/json'},body:JSON.stringify({email,password,email_confirm:true})});const user=await r.json();if(!r.ok)fail('Account creation failed. Check whether this email already has an account.');
+  try{await db('rpc/school_save_record','POST',{record_kind:target.kind,record_data:{...target.data,authId:user.id,username,loginEmail:email,passwordChangeRequired:true},actor_id:p.id,record_id:target.id,expected_version:target.version});}catch(e){await fetch(`${base()}/auth/v1/admin/users/${user.id}`,{method:'DELETE',headers:{apikey:key(),Authorization:`Bearer ${key()}`}});throw e;}
+  return res.json({ok:true,credential:{name:target.data.name,username,email:b.email?email:'',temporaryPassword:password}});
  }
  if(op==='password'){
-  if(!s.accessToken)fail('Password changes apply to staff and parent accounts.');if(typeof b.password!=='string'||b.password.length<12)fail('Use at least 12 characters.');
-  const r=await fetch(`${base()}/auth/v1/user`,{method:'PUT',headers:{apikey:key(),Authorization:`Bearer ${s.accessToken}`,'Content-Type':'application/json'},body:JSON.stringify({password:b.password})});if(!r.ok)fail('The password could not be changed. Sign in again and retry.');cookie(res,'',0);return res.json({ok:true});
+  if(!s.accessToken)fail('Ask the principal to create your password account.');if(typeof b.password!=='string'||b.password.length<12)fail('Use at least 12 characters.');
+  const r=await fetch(`${base()}/auth/v1/user`,{method:'PUT',headers:{apikey:key(),Authorization:`Bearer ${s.accessToken}`,'Content-Type':'application/json'},body:JSON.stringify({password:b.password})});if(!r.ok)fail('The password could not be changed. Sign in again and retry.');
+  const target=all.find(r=>r.id===p.id);if(target.data.passwordChangeRequired)await db('rpc/school_save_record','POST',{record_kind:target.kind,record_data:{...target.data,passwordChangeRequired:false},actor_id:p.id,record_id:target.id,expected_version:target.version});
+  cookie(res,'',0);return res.json({ok:true});
  }
  if(op==='ai-settings'){if(p.role!=='principal')fail('Principal access required.',403);if(!providers[b.provider]||!b.key)fail('Choose a provider and enter its API key.');let selectedModel;try{selectedModel=await chooseModel(b.provider,b.key);}catch(e){fail(e.message,400);}await db('school_secrets?on_conflict=id','POST',{id:'ai',value:crypt(JSON.stringify({provider:b.provider,model:selectedModel,key:b.key}))}).catch(async e=>{if(e.status!==409)throw e;await db('school_secrets?id=eq.ai','PATCH',{value:crypt(JSON.stringify({provider:b.provider,model:selectedModel,key:b.key}))});});return res.json({ok:true});}
  if(op==='ai'){
@@ -239,6 +259,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
  }
  if(op==='save'){
   const kind=b.kind,old=b.id?all.find(r=>r.id===b.id&&r.kind===kind):null;if(b.id&&!old)fail('Record not found.',404);let d={...b.data};
+  if(['profile','student'].includes(kind)){for(const field of ['authId','username','loginEmail','passwordChangeRequired']){if(old&&field in old.data)d[field]=old.data[field];else delete d[field];}}
   if(kind==='exam_attempt')fail('Use the timed assessment workflow.');if(kind==='timetable')fail('Use the timetable generator to validate conflicts.');if(!canWrite(p,kind,d,old,all))fail('Your role cannot make this change.',403);
   if(kind==='profile'&&p.role!=='principal'){const allowed=['name','photo','bio','birthDate','birthPlace','gender','publicServiceDate','schoolAssumptionDate','rank','salaryIndex','phone','whatsapp'];d={...old.data,...Object.fromEntries(Object.entries(d).filter(([k])=>allowed.includes(k)))};}
   if(kind==='profile'&&p.role==='principal'){if(!roles.includes(d.role))fail('Invalid staff role.');if(d.role==='bursar'&&d.active!==false&&all.some(r=>r.kind==='profile'&&r.id!==old?.id&&r.data.role==='bursar'&&r.data.active!==false))fail('There is already an active bursar. End the existing appointment before assigning another.',409);if(old?.data.role==='principal'&&(d.role!=='principal'||d.active===false)&&all.filter(r=>r.kind==='profile'&&r.data.role==='principal'&&r.data.active!==false).length<=1)fail('The last active principal cannot be removed.');}
@@ -258,10 +279,11 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   if(kind==='submission'){if(p.role==='student'){d.studentId=p.id;delete d.feedback;delete d.score;const r=all.find(r=>r.id===d.resourceId&&r.kind==='resource');if(r?.data.dueDate&&Date.now()>new Date(r.data.dueDate+'T23:59:59+01:00').getTime())fail('Submission deadline has passed.');}else{if(!old)fail('Choose an existing submission.');d={...old.data,feedback:d.feedback||'',score:d.score||'',reviewedBy:p.id};}}
   if(kind==='document_request'){if(!old){d={requestType:d.requestType,purpose:String(d.purpose||'').slice(0,2000),dutyDate:d.dutyDate||'',requesterId:p.id,name:p.name,status:'pending',requestedAt:new Date().toISOString()};}else{if(all.some(r=>r.kind==='document'&&r.data.requestId===old.id&&r.data.status==='issued'))fail('This request already has an issued document.');if(!['rejected','cancelled'].includes(d.status))fail('Choose rejection or cancellation.');if(p.role!=='principal'&&d.status!=='cancelled')fail('Only the principal reviews requests.',403);d={...old.data,status:d.status,reviewComment:String(d.reviewComment||'').slice(0,2000),reviewedAt:new Date().toISOString()};}}
   if(kind==='document'){if(old){if(d.status!=='revoked')fail('Issued documents are immutable. Revoke and issue a new reference.');d={...old.data,status:'revoked'};}else {if(d.requestId){const request=all.find(r=>r.kind==='document_request'&&r.id===d.requestId);if(!request||request.data.status!=='pending')fail('Choose a pending request.');if(all.some(r=>r.kind==='document'&&r.data.requestId===d.requestId&&r.data.status==='issued'))fail('This request already has an issued document.',409);d.profileId=request.data.requesterId;d.name=request.data.name;}delete d.issuedBody;if(d.kind!=='letter')d.issuedBody=attestationText(d);else d.name=d.recipient||d.name||d.title;d.token=crypto.randomBytes(24).toString('hex');d.status='issued';}}
-  if(kind==='student'){d.classHistory=old?.data.classHistory||[];if(old&&(old.data.class!==d.class||old.data.status!==d.status))d.classHistory=[...d.classHistory,{from:old.data.class,to:d.class,previousStatus:old.data.status,status:d.status,action:d.movement||'profile update',reason:String(d.movementReason||'').slice(0,1000),date:new Date().toISOString(),actor:p.id}];delete d.requiredSubjects;}
+  if(kind==='student'){const year=d.academicYear||old?.data.academicYear;if(year){if(!/^\d{4}\/\d{4}$/.test(year)||+year.slice(5)!==+year.slice(0,4)+1)fail('Choose a valid academic year.');d.academicYear=year;d.enrolments={...old?.data.enrolments,[year]:{class:d.class,status:d.status||'active'}};}else d.enrolments=old?.data.enrolments||{};d.classHistory=old?.data.classHistory||[];if(old&&(old.data.class!==d.class||old.data.status!==d.status))d.classHistory=[...d.classHistory,{from:old.data.class,to:d.class,previousStatus:old.data.status,status:d.status,action:d.movement||'profile update',reason:String(d.movementReason||'').slice(0,1000),date:new Date().toISOString(),actor:p.id}];delete d.requiredSubjects;}
   d.ownerId=old?.data.ownerId||p.id;d.updatedAt=new Date().toISOString();try{validateRecord(kind,d,classNames);}catch(e){fail(e.message);}
   if(['event','post','gallery','textbook','resource','mark'].includes(kind)&&!['draft','pending','published','rejected'].includes(d.status))fail('Invalid publication status.');
   const result=await db('rpc/school_save_record','POST',{record_kind:kind,record_data:d,actor_id:p.id,record_id:old?.id||null,expected_version:old?b.version:null});return res.json({row:result[0]});
  }
  fail('Unknown action.');
  }catch(e){res.status(e.status||500).json({error:e.status?e.message:'The request could not be completed. Please try again.'});}}
+
