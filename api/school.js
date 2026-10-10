@@ -262,7 +262,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   return res.json({row:result[0]});
  }
  if(op==='save'){
-  const kind=b.kind,old=b.id?all.find(r=>r.id===b.id&&r.kind===kind):null;if(b.id&&!old)fail('Record not found.',404);let d={...b.data};
+  const kind=b.kind,old=b.id?all.find(r=>r.id===b.id&&r.kind===kind):null;if(b.id&&!old)fail('Record not found.',404);let d={...b.data};if(kind==='attendance')d.year=controls.activeYear;
   if(kind==='school_control')fail('Use the school controls on the Home page.',403);
   if(kind==='mark'&&!markSaveAllowed(controls,d,old,p))fail('Mark entry is closed for this year or assessment. Ask the principal or vice-principal to open it.',403);
   if(p.role!=='principal'&&['student','assignment'].includes(kind)){const k=kind==='student'?'academicYear':'year';if(d[k]&&d[k]!==old?.data[k]&&d[k]!==controls.activeYear)fail('Only the principal can select another academic year.',403);}
