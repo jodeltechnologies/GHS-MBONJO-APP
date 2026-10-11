@@ -1,1 +1,26 @@
-{"name":"ghs-mbonjo-limbe","version":"1.0.0","private":true,"type":"module","scripts":{"build":"node build.mjs","test":"node --test tests/*.test.mjs"},"dependencies":{"docx":"^9.7.1","exceljs":"4.4.0","jspdf":"^4.2.1","nodemailer":"10.1.0","pdfjs-dist":"^6.3.289","qrcode":"1.5.4","web-push":"3.6.7"},"devDependencies":{"esbuild":"0.25.9"},"engines":{"node":"24.x"}}
+{
+  "name": "ghs-mbonjo-limbe",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "docx": "^9.7.1",
+    "exceljs": "4.4.0",
+    "jspdf": "^4.2.1",
+    "nodemailer": "10.1.0",
+    "pdfjs-dist": "^6.3.289",
+    "qrcode": "1.5.4",
+    "web-push": "3.6.7",
+    "jszip": "3.10.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.9"
+  },
+  "engines": {
+    "node": "24.x"
+  }
+}
