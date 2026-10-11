@@ -1,3 +1,4 @@
+import {blankPrintHTML} from './student-printing.js';
 // ---------------------------------------------------------------------------
 // The two printed sheets
 // ---------------------------------------------------------------------------
@@ -106,17 +107,17 @@ export function reportCardHTML(sheet,report,{year='',assessment='',cls='',teache
   ['Reprimand / Blâme',n.reprimand],
   ['Suspension / Exclusion temporaire',n.suspension],
   ['Dismissed / Exclusion définitive',n.dismissed]];
- return `<article class="print-page report-card report-${cba?'cba':'sba'}">
+ const html=`<article class="print-page report-card report-${cba?'cba':'sba'}">
  ${reportLetterhead()}
- <div class="rc-title-block"><h2 class="rc-title">${esc(assessment).toUpperCase()} PROGRESS REPORT / BULLETIN DE NOTES</h2>
+ <div class="rc-title-block"><h2 class="rc-title">${report.sample?'BLANK SAMPLE / MODÈLE VIERGE · ':''}${esc(assessment).toUpperCase()} PROGRESS REPORT / BULLETIN DE NOTES</h2>
  <p class="rc-year">ACADEMIC YEAR / ANNÉE SCOLAIRE: ${esc(year)} <span>${cba?'CBA · COMPETENCE BASED':'SBA · SEQUENCE BASED'}</span></p></div>
  <table class="rc-identity"><tbody>${identity.map(([a,b,c,e],i)=>`<tr><td>${pair(a,b)}</td><td>${pair(c,e)}</td>${i===0?photoCell(d.photo):''}</tr>`).join('')}</tbody></table>
  <div class="rc-performance">
  <div><span>Average / Moyenne</span><strong>${red(tot.average,fig(tot.average))}<small> / 20</small></strong></div>
- <div><span>Position / Rang</span><strong>${countValue(sheet.position)}<small> / ${report.ranked}</small></strong></div>
- <div><span>Subjects sat / Matières évaluées</span><strong>${tot.subjectsSat}</strong></div>
- <div><span>Passed / Réussies</span><strong>${tot.subjectsPassed}</strong></div>
- <div><span>Failed / Échouées</span><strong>${tot.subjectsSat-tot.subjectsPassed}</strong></div>
+ <div><span>Position / Rang</span><strong>${countValue(sheet.position)}<small> / ${report.ranked??''}</small></strong></div>
+ <div><span>Subjects sat / Matières évaluées</span><strong>${tot.subjectsSat??''}</strong></div>
+ <div><span>Passed / Réussies</span><strong>${tot.subjectsPassed??''}</strong></div>
+ <div><span>Failed / Échouées</span><strong>${report.sample?'':tot.subjectsSat-tot.subjectsPassed}</strong></div>
  </div>
  <table class="rc-marks"><thead><tr><th>Subject and teacher / Matière et enseignant</th><th>Coef.</th>
  ${cols.map(a=>`<th>${esc(annual?a.replace(' Term',''):columnLabel(a))}</th>`).join('')}
@@ -147,6 +148,7 @@ export function reportCardHTML(sheet,report,{year='',assessment='',cls='',teache
  <tbody><tr><td>Class master / Maître de classe${signature(n.classMasterName)}</td><td>Principal / Proviseur${signature(n.principalName)}</td><td>Parent or guardian / Parent ou tuteur${signature(n.guardianName)}</td></tr></tbody></table>
  <p class="rc-note">-- means no published mark or information. Missing marks are excluded from averages and rankings. ${annual?'Annual marks average the available term averages. ':''}Absence hours and disciplinary observations are entered by the school.</p>
  </article>`;
+ return report.sample?blankPrintHTML(html):html;
 }
 
 export function masterSheetHTML(report,{year='',assessment='',cls='',showMarks=false,format='sba',order='average'}={}){
@@ -161,10 +163,10 @@ export function masterSheetHTML(report,{year='',assessment='',cls='',showMarks=f
  const sheets=[...report.sheets].sort(order==='name'?(a,b)=>a.student.data.name.localeCompare(b.student.data.name):
  (a,b)=>(b.totals.average??-Infinity)-(a.totals.average??-Infinity)||a.student.data.name.localeCompare(b.student.data.name));
  const cell=r=>r.finalMark===null?'<td>--</td>':`<td>${showMarks?red(r.finalMark,fig(r.finalMark)):esc(cba?cbaResult(r.finalMark)?.letter:r.grade)}</td>`;
- return `<article class="print-page master-sheet">
+ const html=`<article class="print-page master-sheet">
  <header class="ms-head"><div class="ms-heading"><img src="/crest.jpg" alt="School crest"><div>
  <p class="ms-kicker">GOVERNMENT HIGH SCHOOL MBONJO LIMBE · LYCEE DE MBONJO LIMBE</p>
- <h2>MASTER RESULT SHEET / FICHE RÉCAPITULATIVE</h2>
+ <h2>${report.sample?'BLANK SAMPLE / MODÈLE VIERGE · ':''}MASTER RESULT SHEET / FICHE RÉCAPITULATIVE</h2>
  <p><b>${esc(cls)}</b> · ${esc(assessment)} · ${esc(year)}</p>
  <p class="ms-format">${cba?'Competence based approach (CBA)':'Sequence based approach (SBA)'} · ${showMarks?'Marks / Notes sur 20':'Letter grades / Notes en lettres'}</p></div></div>
  <table class="ms-summary"><thead><tr><th>CLASS SUMMARY</th><th>Per average</th><th>Per papers</th></tr></thead>
@@ -178,11 +180,12 @@ export function masterSheetHTML(report,{year='',assessment='',cls='',showMarks=f
  <th class="ms-vertical"><span>Total score / Points</span></th><th class="ms-vertical"><span>Average / Moyenne</span></th><th class="ms-vertical"><span>Position / Rang</span></th></tr></thead>
  <tbody>${sheets.map((sheet,i)=>`<tr><td>${i+1}</td><td class="ms-name">${fullName(sheet.student.data.name)}<small>${esc(sheet.student.data.matricule||'')}</small></td>
  ${subjects.map(s=>{const r=sheet.rows.find(x=>x.subject===s);return r?cell(r):'<td>--</td>';}).join('')}
- <td>${sheet.totals.subjectsSat}</td><td>${sheet.totals.subjectsPassed}</td><td>${fig(sheet.totals.total)}</td>
+ <td>${sheet.totals.subjectsSat??''}</td><td>${sheet.totals.subjectsPassed??''}</td><td>${fig(sheet.totals.total)}</td>
  <td class="ms-result">${red(sheet.totals.average,fig(sheet.totals.average))}</td><td><b>${countValue(sheet.position)}</b></td></tr>`).join('')}
  <tr class="ms-averages"><td></td><td class="ms-name">Subject average / Moyenne matière</td>${subjects.map(s=>`<td>${fig(report.subjects[s]?.average)}</td>`).join('')}<td colspan="5"></td></tr>
  <tr class="ms-averages"><td></td><td class="ms-name">Subjects passed / Admis par matière</td>${subjects.map(s=>`<td>${report.subjects[s]?.passed??'--'}</td>`).join('')}<td colspan="5"></td></tr></tbody></table></div>
  <div class="ms-footer"><p>-- = no published mark. Pass by average: ≥ 10/20. Pass by papers: at least half the assessed subjects. Rankings cover this class. The stream average covers the level.</p><p>Class master / Maître de classe: ____________________ &nbsp; Principal / Proviseur: ____________________</p></div>
  </article>`;
+ return report.sample?blankPrintHTML(html):html;
 }
 
