@@ -46,7 +46,18 @@ export const termOfAssessment=a=>{
 };
 // What a request for "First Term" or for "Sequence 3" actually needs from the
 // database. A promotion exam stands on its own.
-export const assessmentsIn=choice=>TERMS.includes(choice)?termSequences(choice):[choice];
+export const assessmentsIn=choice=>choice==='Annual Report'?[...sequences]:TERMS.includes(choice)?termSequences(choice):[choice];
+
+// Verified against the old system's 2025/2026 Form 1A CBA reports.
+// Keep this separate from the sequence-based A-to-U scale.
+export const cbaScale=[
+ {from:18,to:20,letter:'A+',abbr:'CVWA',en:'Competences very well acquired',fr:'Compétences très bien acquises'},
+ {from:16,to:17,letter:'A',abbr:'CVWA',en:'Competences very well acquired',fr:'Compétences très bien acquises'},
+ {from:15,to:15,letter:'B+',abbr:'CWA',en:'Competences well acquired',fr:'Compétences bien acquises'},
+ {from:14,to:14,letter:'B',abbr:'CWA',en:'Competences well acquired',fr:'Compétences bien acquises'},
+ {from:12,to:13,letter:'C+',abbr:'CA',en:'Competences acquired',fr:'Compétences acquises'},
+ {from:10,to:11,letter:'C',abbr:'CAA',en:'Competences averagely acquired',fr:'Compétences moyennement acquises'},
+ {from:0,to:9,letter:'D',abbr:'CNA',en:'Competences not acquired',fr:'Compétences non acquises'}];
 
 // ---------------------------------------------------------------------------
 // Grading
@@ -79,6 +90,7 @@ const band=(scale,mark)=>{
 };
 export const competence=mark=>band(competenceScale,mark);
 export const letterGrade=mark=>band(letterScale,mark)?.letter||'';
+export const cbaResult=mark=>band(cbaScale,mark);
 // A mark below ten is printed in red on the school's sheets, and so is anything
 // derived from it: the weighted total, the averages, the subject average.
 export const belowPass=v=>scored(v)&&Number(v)<10;
@@ -96,15 +108,18 @@ export function studentRows(marks,subjects,assessments,{coefficients={}}={}){
   const mine=marks.filter(m=>m.subject===subject);
   const perAssessment=assessments.map(a=>{
    const found=mine.find(m=>m.assessment===a);
-   return {assessment:a,mark:found&&scored(found.mark)?Number(found.mark):null};
+   return {assessment:a,mark:found&&scored(found.mark)?Number(found.mark):null,competencies:String(found?.competencies||'')};
   });
   const got=perAssessment.filter(x=>x.mark!==null).map(x=>x.mark);
   // The final mark is the average of the sequences that were actually sat. A
   // missing sequence is not a zero, so a student assessed once is judged on that
   // one mark rather than on half of it.
-  const finalMark=got.length?got.reduce((a,b)=>a+b,0)/got.length:null;
+  const termAverages=TERMS.map(term=>{const values=perAssessment.filter(x=>termSequences(term).includes(x.assessment)&&x.mark!==null).map(x=>x.mark);return {term,mark:values.length?values.reduce((a,b)=>a+b,0)/values.length:null};});
+  const annual=assessments.length===6&&sequences.every(a=>assessments.includes(a));
+  const values=annual?termAverages.filter(x=>x.mark!==null).map(x=>x.mark):got;
+  const finalMark=values.length?values.reduce((a,b)=>a+b,0)/values.length:null;
   const coefficient=Number(mine.find(m=>scored(m.coefficient))?.coefficient??coefficients[subject]??0)||null;
-  return {subject,perAssessment,finalMark,coefficient,
+  return {subject,perAssessment,termAverages,finalMark,coefficient,
           total:finalMark===null||!coefficient?null:finalMark*coefficient,
           grade:finalMark===null?'':letterGrade(finalMark),
           remark:finalMark===null?'':competence(finalMark)?.abbr||''};
@@ -153,6 +168,8 @@ export function classReport({students=[],marks=[],choice='',subjectsFor=()=>[],c
    sat:got.length,
    passed:got.filter(x=>x.mark>=PASS).length,
    average:got.length?got.reduce((n,x)=>n+x.mark,0)/got.length:null,
+   minimum:got.length?Math.min(...got.map(x=>x.mark)):null,
+   maximum:got.length?Math.max(...got.map(x=>x.mark)):null,
    rankOf:id=>{const own=got.find(x=>x.id===id);return own?1+got.filter(x=>x.mark>own.mark).length:null;}};
  }
 
@@ -199,3 +216,4 @@ export function streamAverage(perClassAverages=[]){
  const all=perClassAverages.flat().filter(scored);
  return all.length?all.reduce((a,b)=>a+Number(b),0)/all.length:null;
 }
+

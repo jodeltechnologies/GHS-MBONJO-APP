@@ -153,3 +153,106 @@
 .portal .class-roster-table>table>thead>tr>th:last-child:not([data-column]){position:sticky;right:0;z-index:2;min-width:76px;background:#eef4ef;box-shadow:-3px 0 6px #17372e0a}
 .portal .class-roster-table>table>tbody>tr>td:last-child[data-label="Actions"]{position:sticky;right:0;z-index:1;min-width:76px;background:#fff;box-shadow:-3px 0 6px #17372e0a}
 }
+
+
+/* School reports: restrained colour, readable names and print-safe tables. */
+#print-content:has(.report-card),#print-content:has(.master-sheet){background:#edf1f5;padding:16px;overflow:auto}
+#print-content .report-card{width:190mm;min-width:190mm;min-height:0;margin:0 auto 20px;padding:7mm;background:#fff;box-shadow:0 3px 20px #18334d18;font:8pt/1.3 Arial,sans-serif;color:#203348}
+.report-card table{min-width:0;table-layout:fixed}
+.report-card td,.report-card th{border-color:#b7c4cf;overflow-wrap:anywhere}
+.report-card .rc-head{border-top:3px solid #173a58;margin:0}
+.report-card .rc-head td{font-size:6.5pt;border:0;padding:1px 3px;line-height:1.25}
+.report-card .rc-head .rc-strong{font-size:7pt;color:#173a58;padding-top:4px}
+.report-card .rc-head .rc-email{font-size:6.1pt;white-space:normal}
+.report-card .rc-head .rc-crest{width:21mm}
+.report-card .rc-head .rc-crest img{width:17mm;height:17mm}
+.rc-title-block{border-top:1px solid #c7d3de;border-bottom:2px solid #1c675d;margin:3mm 0;padding:2mm 0}
+.report-card .rc-title{font-size:11pt;color:#173a58;margin:0 0 2px}
+.report-card .rc-year{font-size:7pt;margin:0}
+.rc-year span{display:block;font-size:6.5pt;color:#527065;margin-top:2px}
+.report-card .rc-identity{margin:0 0 3mm}
+.report-card .rc-identity td{font-size:7pt;padding:3px 5px;width:auto}
+.rc-label{display:block;font-size:6pt;color:#586d7c;margin-bottom:1px}
+.report-card .rc-photo{width:23mm}
+.report-card .rc-photo img{width:20mm;height:26mm}
+.report-card .rc-photo span{width:20mm;height:26mm}
+.rc-performance{display:grid;grid-template-columns:1.5fr 1.2fr 1.4fr 1fr 1fr;border:1px solid #b8ccc5;background:#f1f7f4;margin-bottom:3mm}
+.rc-performance>div{padding:5px 7px;border-right:1px solid #c4d6cd}
+.rc-performance>div:last-child{border:0}
+.rc-performance span{display:block;font-size:6pt;color:#4d685e}
+.rc-performance strong{display:block;font-size:12pt;color:#155a49}
+.rc-performance strong small{font-size:7pt;font-weight:400}
+.report-card .rc-marks{margin:0;table-layout:auto}
+.report-card .rc-marks th{background:#173a58;color:#fff;font-size:6pt;padding:4px 3px;border-color:#173a58;line-height:1.2}
+.report-card .rc-marks td{font-size:7pt;padding:4px 3px;font-variant-numeric:tabular-nums}
+.report-card .rc-marks td.rc-subject{width:26%;font-size:6.5pt;font-weight:700}
+.report-card .rc-marks td.rc-subject small{font-size:5.7pt;color:#536775;margin-top:2px;font-weight:400}
+.report-card .rc-marks td.rc-remark{font-size:5.8pt;text-align:left;width:12%}
+.report-card .rc-marks td.rc-final{background:#f0f6f4;font-weight:700}
+.report-card .rc-marks .rc-competency-row td{text-align:left;background:#f7f9fb;font-size:6pt;color:#3f5668;padding:3px 5px}
+.rc-competency-row span{display:block;line-height:1.3}
+.report-card .rc-marks tr.rc-total td{background:#e7f1ed;border-top:2px solid #1c675d}
+.report-card .rc-foot{gap:3mm;margin-top:3mm}
+.report-card .rc-h{background:#edf2f6;color:#173a58;font-size:7pt;padding:4px;margin:0 0 3px;text-align:left;border-left:3px solid #1c675d}
+.report-card .rc-box td{font-size:6.5pt;padding:3px 5px}
+.report-card .rc-box td:last-child{width:33%}
+.rc-observation{border:1px solid #b7c4cf;font-size:6.5pt;white-space:pre-wrap;overflow-wrap:anywhere;min-height:8mm;padding:4px;margin:3px 0 5px}
+.rc-key{margin-top:3mm}
+.rc-key>summary{font-size:6.5pt;font-weight:700;color:#173a58;margin:0 0 3px;list-style:none;cursor:default}
+.report-card .rc-ref td,.report-card .rc-ref th{font-size:5.8pt;padding:2px 4px;line-height:1.2}
+.report-card .rc-ref th{background:#edf2f6}
+.report-card .rc-sign{margin-top:3mm;break-inside:avoid}
+.report-card .rc-sign th{font-size:6.5pt;background:#edf2f6;padding:3px}
+.report-card .rc-sign td{height:17mm;font-size:6pt;padding:4px}
+.rc-sign td>b{display:block;font-size:6pt;margin-top:3px}
+.rc-sign-line{display:block;border-bottom:1px solid #8799a7;margin-top:7mm}
+.report-card .rc-note{font-size:5.8pt;color:#61717e;margin-top:3mm}
+#print-content .master-sheet{width:277mm;min-width:277mm;min-height:0;padding:5mm;margin:0 auto 20px;box-shadow:0 3px 20px #18334d18;font:8pt/1.25 Arial,sans-serif}
+.master-sheet .ms-head{border-top:3px solid #173a58;padding-top:4mm;margin:0 0 4mm}
+.ms-heading{display:flex;align-items:flex-start;gap:3mm;min-width:0}
+.ms-heading img{width:17mm;height:17mm;object-fit:contain}
+.master-sheet .ms-head h2{font-size:11pt;color:#173a58;margin:2mm 0}
+.master-sheet .ms-head p{font-size:8pt}
+.ms-kicker{font-size:6pt!important;font-weight:700;color:#486272}
+.ms-format{font-size:7pt!important;color:#557068;margin-top:2mm!important}
+.master-sheet .ms-summary{width:98mm;flex-shrink:0;table-layout:auto}
+.master-sheet .ms-summary th{background:#173a58;color:white}
+.master-sheet .ms-summary th,.master-sheet .ms-summary td{font-size:6.5pt;border-color:#b7c4cf;padding:2px 4px}
+.master-sheet .ms-grid{table-layout:fixed;width:100%;min-width:0}
+.master-sheet .ms-grid th{background:#eaf0f5;color:#173a58;border-color:#a7b9c8}
+.master-sheet .ms-grid td,.master-sheet .ms-grid th{font-size:6.6pt;border-color:#b7c4cf;padding:3px 2px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.master-sheet .ms-grid th.ms-vertical{height:43mm;padding:2px 0}
+.master-sheet .ms-grid th.ms-vertical span{font-size:6pt}
+.master-sheet .ms-grid .ms-name{white-space:normal;min-width:0;font-size:6.5pt;line-height:1.2}
+.ms-name small{display:block;font-size:5.5pt;color:#758694;margin-top:2px}
+.master-sheet .ms-grid tbody tr:nth-child(even) td{background:#f5f8fa}
+.master-sheet .ms-grid td.ms-result{background:#edf6f1;font-weight:700}
+.master-sheet .ms-grid tr.ms-averages td{background:#e7f1ed;font-size:6pt;border-top:1px solid #8cb8a6}
+.ms-footer{border-top:2px solid #1c675d;margin-top:3mm;padding-top:2mm;font-size:6pt;color:#546b77}
+.ms-footer p{margin:2mm 0}
+@page school-report{size:A4 portrait;margin:8mm}
+@page school-master{size:A4 landscape;margin:8mm}
+@media print{
+ #print-content:has(.report-card),#print-content:has(.master-sheet){padding:0;background:white;overflow:visible}
+ #print-content .report-card{page:school-report;width:auto;min-width:0;margin:0;padding:0;font-size:8pt;break-after:page}
+ #print-content .master-sheet{page:school-master;width:auto;min-width:0;margin:0;padding:0;break-after:page}
+ #print-content .print-page:last-child{break-after:auto}
+ #print-content .report-card *,#print-content .master-sheet *{font-family:Arial,sans-serif!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+ .report-card thead,.master-sheet thead{display:table-header-group}
+ .report-card tr,.master-sheet tr,.report-card .rc-foot,.report-card .rc-key{break-inside:avoid}
+ .master-sheet .table-scroll{overflow:visible}
+ .report-card .rc-key>summary{display:block}
+}
+/* Keep a subject and its competencies together across page breaks. */
+.report-card tbody.rc-subject-group{break-inside:avoid}
+.master-sheet .ms-grid th.ms-vertical{position:relative}
+.master-sheet .ms-grid th.ms-vertical span{position:absolute;left:50%;bottom:3px;width:37mm;writing-mode:horizontal-tb;white-space:normal;transform:rotate(-90deg);transform-origin:left bottom;text-align:left;line-height:1.1;font-size:6pt}
+.master-sheet .ms-summary td:not(:first-child),.master-sheet .ms-summary th:not(:first-child){width:17mm}
+.master-sheet .ms-summary td:first-child,.master-sheet .ms-summary th:first-child{width:64mm}
+@media print{#print-content .report-card,#print-content .master-sheet{box-shadow:none}.report-card tbody.rc-subject-group{break-inside:avoid}}
+.master-sheet .ms-name small{display:inline;float:right;margin:0 0 0 4px;font-size:5.5pt}
+#print-content:has(.report-card),#print-content:has(.master-sheet){background:#fff}
+.master-sheet .ms-grid td{padding:2px}
+.master-sheet .ms-grid td{padding:1px 2px}
+.ms-footer{break-inside:avoid;margin-top:2mm;padding-top:1mm}
+.ms-footer p{margin:1mm 0}
