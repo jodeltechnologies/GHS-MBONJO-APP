@@ -271,14 +271,14 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   const password=b.password||temporaryPassword();
   const username=normalizeUsername(b.username||accountUsername(target,all));
   const email=String(b.email||accountEmail(target)).trim().toLowerCase();
-  if(password.length!==9||!/^\S+@\S+\.\S+$/.test(email)||!username)fail('Provide a valid email or username and a temporary password of exactly 9 characters.');
+  if((typeof password!=='string'||password.length<8||password.length>12)||!/^\S+@\S+\.\S+$/.test(email)||!username)fail('Provide a valid email or username and a password between 8 and 12 characters.');
   if(all.some(r=>r.id!==target.id&&r.data.username===username))fail('This username is already assigned.',409);
   const r=await fetch(`${base()}/auth/v1/admin/users`,{method:'POST',headers:{apikey:key(),Authorization:`Bearer ${key()}`,'Content-Type':'application/json'},body:JSON.stringify({email,password,email_confirm:true})});const user=await r.json();if(!r.ok)fail('Account creation failed. Check whether this email already has an account.');
   try{await db('rpc/school_save_record','POST',{record_kind:target.kind,record_data:{...target.data,authId:user.id,username,loginEmail:email,passwordChangeRequired:true},actor_id:p.id,record_id:target.id,expected_version:target.version});}catch(e){await fetch(`${base()}/auth/v1/admin/users/${user.id}`,{method:'DELETE',headers:{apikey:key(),Authorization:`Bearer ${key()}`}});throw e;}
   return res.json({ok:true,credential:{name:target.data.name,username,email:b.email?email:'',temporaryPassword:password}});
  }
  if(op==='password'){
-  if(!s.accessToken)fail('Ask the principal to create your password account.');if(typeof b.password!=='string'||b.password.length<12)fail('Use at least 12 characters.');
+  if(!s.accessToken)fail('Ask the principal to create your password account.');if(typeof b.password!=='string'||(b.password.length<8||b.password.length>12))fail('Use between 8 and 12 characters.');
   const r=await fetch(`${base()}/auth/v1/user`,{method:'PUT',headers:{apikey:key(),Authorization:`Bearer ${s.accessToken}`,'Content-Type':'application/json'},body:JSON.stringify({password:b.password})});if(!r.ok)fail('The password could not be changed. Sign in again and retry.');
   const target=all.find(r=>r.id===p.id);if(target.data.passwordChangeRequired)await db('rpc/school_save_record','POST',{record_kind:target.kind,record_data:{...target.data,passwordChangeRequired:false},actor_id:p.id,record_id:target.id,expected_version:target.version});
   cookie(res,'',0);return res.json({ok:true});
