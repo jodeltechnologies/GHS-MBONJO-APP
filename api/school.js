@@ -1,3 +1,4 @@
+import {blankReport} from '../src/student-printing.js';
 import {temporaryPassword} from '../src/login-password.js';
 import {notificationAction} from '../src/notifications.js';
 import {promotionPlan,nextAcademicYear} from '../src/promotion.js';
@@ -111,17 +112,21 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
  // read, not just the one being printed. One query per class and assessment keeps
  // the filter simple and the assessment names, which contain spaces, unescaped.
  if(op==='reports'){
+  if(!['principal','vp','student','parent'].includes(p.role))fail('Only the administration, student or linked parent can access a full report.',403);
+  if(b.mode&& !['published','blank'].includes(b.mode))fail('Choose published results or a blank sample.');
+  if(b.mode==='blank'&&!admin(p))fail('Only the principal or vice-principal can print blank samples.',403);
+  if(!/^\d{4}\/\d{4}$/.test(b.year||''))fail('Choose a valid academic year.');
   const wanted=assessmentsIn(b.assessment||'').filter(Boolean);
   if(!wanted.length)fail('Choose a term, a sequence or the promotion exam.');
   if(!classNames.includes(b.class))fail('Choose a valid class.');
-  for(const cls of classesInLevel(b.class,classNames))for(const a of wanted)
+  if(b.mode!=='blank')for(const cls of classesInLevel(b.class,classNames))for(const a of wanted)
    all.push(...await allRecords('kind=eq.mark&data->>class=eq.'+enc(cls)+'&data->>year=eq.'+enc(b.year)+'&data->>assessment=eq.'+enc(a)+'&data->>status=eq.published'));
  }
  if(op==='state'){const visible=all.filter(r=>canRead(p,r,all)).map(r=>redact(p,r));for(const r of all.filter(r=>r.kind==='profile'&&r.data.role!=='parent'))if(!visible.some(x=>x.id===r.id))visible.push({id:r.id,kind:'directory',data:{name:r.data.name}});return res.json({profile:p,rows:visible,controls:{...controls,version:all.find(r=>r.id===CONTROL_ID)?.version}});}
  if(op==='reports'){
   if(!['principal','vp','student','parent'].includes(p.role))fail('Only the administration, student or linked parent can access a full report.',403);
   const wanted=assessmentsIn(b.assessment);
-  const marksIn=cls=>all.filter(r=>r.kind==='mark'&&r.data.class===cls&&r.data.year===b.year&&wanted.includes(r.data.assessment)&&r.data.status==='published').map(r=>r.data);
+  const marksIn=cls=>b.mode==='blank'?[]:all.filter(r=>r.kind==='mark'&&r.data.class===cls&&r.data.year===b.year&&wanted.includes(r.data.assessment)&&r.data.status==='published').map(r=>r.data);
   // Who is on the roll: everyone registered in the class this year, plus anyone a
   // published mark names, so a student who has since left still gets their sheet.
   const rollOf=cls=>{
@@ -148,7 +153,8 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   // sheet, with the class figures it is measured against left intact.
   const visible=own.sheets.filter(x=>canRead(p,all.find(r=>r.id===x.student.id)||{kind:'student',data:x.student.data},all));
   const sheets=visible.map(sheet=>({...sheet,details:reportInformation(all,sheet.student,{year:b.year,assessment:b.assessment,cls:b.class})}));
-  return res.json({report:{...own,sheets,teacherNames:reportTeacherNames(all,{year:b.year,cls:b.class})},class:b.class,year:b.year,assessment:b.assessment});
+  const report={...own,sheets,teacherNames:reportTeacherNames(all,{year:b.year,cls:b.class})};
+  return res.json({report:b.mode==='blank'?blankReport(report):report,class:b.class,year:b.year,assessment:b.assessment});
  }
 
  if(op==='import-students'){
