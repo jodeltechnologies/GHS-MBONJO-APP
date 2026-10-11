@@ -8,6 +8,7 @@ import progressionSheets from './data/progression.json' with {type:'json'};
 import {validateQuestions,publicQuestions,gradeAttempt,acceptAnswers} from '../src/exams.js';
 import {enrolment,availableSubjects,academicYear,studentsInYear,assignmentsInYear} from '../src/academics.js';
 import {classReport,assessmentsIn,streamAverage} from '../src/reports.js';
+import {reportInformation,reportTeacherNames} from '../src/report-information.js';
 import {providers,chooseModel} from '../src/providers.js';
 import {trustedOrigin} from '../src/origin.js';
 import {effectiveRole,canUseWriter,colleagueContacts} from '../src/posts.js';
@@ -146,7 +147,8 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   // The administration prints the class; a student or parent gets only their own
   // sheet, with the class figures it is measured against left intact.
   const visible=own.sheets.filter(x=>canRead(p,all.find(r=>r.id===x.student.id)||{kind:'student',data:x.student.data},all));
-  return res.json({report:{...own,sheets:visible},class:b.class,year:b.year,assessment:b.assessment});
+  const sheets=visible.map(sheet=>({...sheet,details:reportInformation(all,sheet.student,{year:b.year,assessment:b.assessment,cls:b.class})}));
+  return res.json({report:{...own,sheets,teacherNames:reportTeacherNames(all,{year:b.year,cls:b.class})},class:b.class,year:b.year,assessment:b.assessment});
  }
 
  if(op==='import-students'){
@@ -328,7 +330,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   if(['assignment','resource'].includes(kind)){const subject=availableSubjects(all).find(x=>x.name===d.subject);if(!subject)fail('Choose a subject in Classes & subjects.');d.department=subject.department;const staff=kind==='assignment'?all.find(r=>r.kind==='profile'&&r.id===d.teacherId)?.data:p;if(kind==='assignment'&&staff?.department!==d.department&&!staff?.teachingSubjects?.includes(d.subject)&&!(old?.data.sourceKey&&old.data.teacherId===d.teacherId&&old.data.subject===d.subject))fail('The teacher’s department must match this subject.');if(kind==='resource'&&!admin(p)&&p.department!==d.department)fail('Choose a subject in your own department.',403);const rule=all.find(r=>r.kind==='classroom'&&r.data.name===d.class);if(rule&&!rule.data.subjects?.includes(d.subject)&&!(kind==='assignment'&&rule.data.legacyAcademics?.[d.year]?.subjects?.includes(d.subject))&&!all.some(r=>r.kind==='student'&&r.data.class===d.class&&r.data.subjects?.includes(d.subject)))fail('Add this subject to the class or an individual student first.');}
   if(kind==='classroom'){if(!Array.isArray(d.subjects)||d.subjects.some(x=>!availableSubjects(all).some(s=>s.name===x)))fail('Select valid compulsory subjects.');if(old&&old.data.name!==d.name)fail('Class names are fixed after creation. Create a new class and transfer students instead.');}
   if(kind==='assignment'){const t=all.find(r=>r.id===d.teacherId&&r.kind==='profile');if(!t||!['teacher','hod','vp','principal'].includes(effectiveRole(t.data.role)))fail('Choose a teacher profile.');}
-  if(['mark','attendance'].includes(kind)){const student=all.find(r=>r.kind==='student'&&r.id===d.studentId);const enrolledClass=student?.data.enrolments?.[d.year||controls.activeYear]?.class||student?.data.class;if(!student||(enrolledClass!==d.class&&old?.data.class!==d.class))fail('Student does not belong to this class.');if(kind==='mark')d.studentSnapshot=old?.data.studentSnapshot||{name:student.data.name,matricule:student.data.matricule,birthDate:student.data.birthDate,gender:student.data.gender,class:d.class,photo:student.data.photo};if(kind==='mark'&&!studies(student.data,d.subject))fail('Student is not enrolled in this subject.');}
+  if(['mark','attendance'].includes(kind)){const student=all.find(r=>r.kind==='student'&&r.id===d.studentId);const enrolledClass=student?.data.enrolments?.[d.year||controls.activeYear]?.class||student?.data.class;if(!student||(enrolledClass!==d.class&&old?.data.class!==d.class))fail('Student does not belong to this class.');if(kind==='mark')d.studentSnapshot=old?.data.studentSnapshot||{name:student.data.name,matricule:student.data.matricule,birthDate:student.data.birthDate,birthPlace:student.data.birthPlace,gender:student.data.gender,class:d.class,photo:student.data.photo,guardianName:student.data.guardianName,guardianPhone:student.data.guardianPhone,repeater:student.data.repeater};if(kind==='mark'&&!studies(student.data,d.subject))fail('Student is not enrolled in this subject.');}
   if(kind==='attendance'){d.year=controls.activeYear;const a=all.find(r=>r.kind==='assignment'&&r.id===d.assignmentId);if(!a||(a.data.year||academicYear())!==controls.activeYear||a.data.class!==d.class||(!admin(p)&&p.role!=='discipline'&&a.data.teacherId!==p.id))fail('Attendance must belong to your assigned lesson.',403);d.subject=a.data.subject;const pupil=all.find(r=>r.kind==='student'&&r.id===d.studentId);if(!studies(pupil.data,d.subject))fail('Student is not enrolled in this lesson.');}
   if(kind==='submission'){if(p.role==='student'){d.studentId=p.id;delete d.feedback;delete d.score;const r=all.find(r=>r.id===d.resourceId&&r.kind==='resource');if(r?.data.dueDate&&Date.now()>new Date(r.data.dueDate+'T23:59:59+01:00').getTime())fail('Submission deadline has passed.');}else{if(!old)fail('Choose an existing submission.');d={...old.data,feedback:d.feedback||'',score:d.score||'',reviewedBy:p.id};}}
   if(kind==='document_request'){if(!old){d={requestType:d.requestType,purpose:String(d.purpose||'').slice(0,2000),dutyDate:d.dutyDate||'',requesterId:p.id,name:p.name,status:'pending',requestedAt:new Date().toISOString()};}else{if(all.some(r=>r.kind==='document'&&r.data.requestId===old.id&&r.data.status==='issued'))fail('This request already has an issued document.');if(!['rejected','cancelled'].includes(d.status))fail('Choose rejection or cancellation.');if(p.role!=='principal'&&d.status!=='cancelled')fail('Only the principal reviews requests.',403);d={...old.data,status:d.status,reviewComment:String(d.reviewComment||'').slice(0,2000),reviewedAt:new Date().toISOString()};}}
@@ -340,6 +342,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
  }
  fail('Unknown action.');
  }catch(e){res.status(e.status||500).json({error:e.status?e.message:'The request could not be completed. Please try again.'});}}
+
 
 
 
