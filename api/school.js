@@ -1,3 +1,4 @@
+import {temporaryPassword} from '../src/login-password.js';
 import {notificationAction} from '../src/notifications.js';
 import {promotionPlan,nextAcademicYear} from '../src/promotion.js';
 import {CONTROL_ID,schoolControls,changeControls,markSaveAllowed} from '../src/school-controls.js';
@@ -257,7 +258,7 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
   if(target.id===p.id)fail('Use Change password for your own account.');
   if(target.data.active===false||['graduated','dismissed','transferred out'].includes(target.data.status))fail('Activate this school record before resetting its login.');
   if(b.version!==target.version)fail('Account changed. Refresh before resetting.',409);
-  const password='Ghs!'+crypto.randomBytes(18).toString('base64url');
+  const password=temporaryPassword();
   // Persist the session barrier first. A provider failure leaves access blocked until the principal retries.
   await db('rpc/school_save_record','POST',{record_kind:target.kind,record_data:{...target.data,authEpoch:(target.data.authEpoch||0)+1,passwordChangeRequired:true,passwordResetAt:new Date().toISOString(),passwordResetBy:p.id},actor_id:p.id,record_id:target.id,expected_version:target.version});
   const response=await fetch(`${base()}/auth/v1/admin/users/${encodeURIComponent(target.data.authId)}`,{method:'PUT',headers:{apikey:key(),Authorization:`Bearer ${key()}`,'Content-Type':'application/json'},body:JSON.stringify({password})});
@@ -267,10 +268,10 @@ export default async function handler(req,res){res.setHeader('Cache-Control','no
  if(op==='provision'){
   if(p.role!=='principal')fail('Principal access required.',403);
   const target=all.find(r=>r.id===(b.recordId||b.profileId));if(!target||!canProvision(target))fail('Choose an active account without an existing login.');
-  const password=b.password||'Ghs!'+crypto.randomBytes(18).toString('base64url');
+  const password=b.password||temporaryPassword();
   const username=normalizeUsername(b.username||accountUsername(target,all));
   const email=String(b.email||accountEmail(target)).trim().toLowerCase();
-  if(password.length<12||!/^\S+@\S+\.\S+$/.test(email)||!username)fail('Provide a valid email or username and a password of at least 12 characters.');
+  if(password.length!==9||!/^\S+@\S+\.\S+$/.test(email)||!username)fail('Provide a valid email or username and a temporary password of exactly 9 characters.');
   if(all.some(r=>r.id!==target.id&&r.data.username===username))fail('This username is already assigned.',409);
   const r=await fetch(`${base()}/auth/v1/admin/users`,{method:'POST',headers:{apikey:key(),Authorization:`Bearer ${key()}`,'Content-Type':'application/json'},body:JSON.stringify({email,password,email_confirm:true})});const user=await r.json();if(!r.ok)fail('Account creation failed. Check whether this email already has an account.');
   try{await db('rpc/school_save_record','POST',{record_kind:target.kind,record_data:{...target.data,authId:user.id,username,loginEmail:email,passwordChangeRequired:true},actor_id:p.id,record_id:target.id,expected_version:target.version});}catch(e){await fetch(`${base()}/auth/v1/admin/users/${user.id}`,{method:'DELETE',headers:{apikey:key(),Authorization:`Bearer ${key()}`}});throw e;}
