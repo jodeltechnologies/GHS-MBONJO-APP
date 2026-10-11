@@ -130,3 +130,16 @@
 .profile-summary{display:flex;align-items:center;gap:24px;flex-wrap:wrap;margin-bottom:24px}
 .profile-summary .avatar-large{width:150px;height:150px;flex:0 0 150px;border:4px solid #f1f5ed}
 .profile-summary h2{margin:0 0 6px;overflow-wrap:anywhere}.profile-summary p{margin:0;color:#63776f}
+
+/* Compact, consistent news cards. */
+.school-home .home-news .news-card{border:1px solid #dce4df;border-radius:16px;box-shadow:0 4px 18px #173c3308;transition:border-color .2s,box-shadow .2s,transform .2s}
+.school-home .home-news .news-card:hover{border-color:#a7beb1;box-shadow:0 10px 26px #173c3312;transform:translateY(-3px)}
+.school-home .home-news .news-card .article-number{min-height:76px;padding:18px 26px;background:#123f35!important;color:#f5f7ef!important;border-bottom:3px solid #cda95c}
+.school-home .home-news .article-number span{font-size:.68rem;letter-spacing:.12em;color:#f5f7ef}
+.school-home .home-news .article-number b{font-size:1.9rem;color:#e7c77f;opacity:1}
+.school-home .home-news .news-card>div:last-child{padding:26px;gap:0}
+.school-home .home-news .news-card h3{color:#253c34;font-size:1.16rem;font-weight:650;line-height:1.5;letter-spacing:-.015em;margin:0 0 26px}
+.school-home .home-news .news-card .text-button{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;border-radius:8px;background:#edf3ee;color:#17543d;font-size:.84rem;min-height:44px}
+.school-home .home-news .news-card .text-button:hover{background:#dce9df;color:#103f2d}
+@media(max-width:760px){.school-home .home-news .news-card .article-number{min-height:66px;padding:14px 22px}.school-home .home-news .news-card>div:last-child{padding:22px}}
+@media(prefers-reduced-motion:reduce){.school-home .home-news .news-card{transition:none}.school-home .home-news .news-card:hover{transform:none}}
