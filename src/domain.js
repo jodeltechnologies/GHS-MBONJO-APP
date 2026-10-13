@@ -37,7 +37,7 @@ export const normalizeBirthDate = v => {
  return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
 };
 export const promotionEligible = c => /^Form [1-4][A-Z]$/.test(c)||c.startsWith('Lower Sixth');
-export const studies=(student,subject)=>Array.isArray(student.requiredSubjects)?[...student.requiredSubjects,...(student.subjects||[])].includes(subject):!Array.isArray(student.subjects)||student.subjects.length===0||student.subjects.includes(subject);
+export const studies=(student,subject)=>Object.hasOwn(student.subjectParticipation||{},subject)?student.subjectParticipation[subject]===true:Array.isArray(student.requiredSubjects)?[...student.requiredSubjects,...(student.subjects||[])].includes(subject):!Array.isArray(student.subjects)||student.subjects.length===0||student.subjects.includes(subject);
 // The teaching slots one class has on one day.
 // Forms 1 to 4 close at 14:40, so periods 9 and 10 exist only for Form 5 on the
 // 16:00 setting and for Sixth Form. Wednesday closes at 13:00 for everybody.
