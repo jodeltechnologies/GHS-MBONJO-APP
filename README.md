@@ -304,3 +304,11 @@ Multiple holders are allowed for staff posts except the bursar, who has a databa
 See START-HERE.md for this update. Attestations follow the original bilingual field layout with one heading and a compact QR caption underneath. Fonts are bundled: Outfit for the interface and Tinos regular/bold for documents. Tinos is a freely redistributable Times-compatible font, not Microsoft Times New Roman. PDF and Word exports embed the document fonts. See START-HERE.md and AUDIT.md for this update and current verification limits.
 
 Clean URL rewrites preserve old hash links. Student records are displayed after class and student selection. Sixteen bilingual department descriptions and the original principal welcome are included. The activities photo was transcribed into 20 dated public entries and five undated drafts requiring school review. Calendar dates follow the supplied school schedule, including its November term boundary.
+
+## GCE past questions
+
+The public `/revision` page, each department page and the portal Learning Centre include the MINESEC past-paper catalogue checked on 13 October 2026. Students can filter Form 5 (Ordinary Level) and Upper Sixth (Advanced Level) papers by department, subject, year and exam type, or search titles. Results use twelve cards per page. English includes language and literature, Biology includes Human Biology, Geography includes Geology, Computer Science includes ICT, and Mathematics includes its published options.
+
+Papers link to the publisher’s original pages and PDFs. Internet access is required to open them. Mock examinations retain the publisher’s mock label. Guidance and Counselling, Religious Studies and Physical Education have explicit empty states because the checked collection contains no matching subjects. The catalogue is a dated snapshot in `src/gce-papers.json`, not a live synchronisation. Updating it requires checking the source again. No pupil records or academic-year settings are changed.
+
+Validation: `node --test tests/gce-revision.test.mjs` checks source links, class and department filtering, exam types, complete pagination, bilingual sections and empty coverage.

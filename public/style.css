@@ -256,3 +256,8 @@
 .master-sheet .ms-grid td{padding:1px 2px}
 .ms-footer{break-inside:avoid;margin-top:2mm;padding-top:1mm}
 .ms-footer p{margin:1mm 0}
+
+/* GCE revision catalogue */
+.gce-library{margin:2rem 0}.gce-library-heading{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}.gce-library-heading .eyebrow{margin-bottom:.5rem}.gce-library-heading h2{margin-bottom:.8rem}.gce-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 1rem}.gce-filters label{min-width:0}.gce-paper-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem}.gce-paper{border:1px solid #dce6df;border-radius:8px;padding:1.3rem;display:flex;flex-direction:column;min-width:0}.gce-paper h3{font-size:1.15rem;overflow-wrap:anywhere;margin:.5rem 0 1rem}.gce-paper .actions{margin-top:auto;margin-bottom:0}.gce-paper-meta{display:flex;gap:.4rem;flex-wrap:wrap}.gce-subject{font-size:.8rem;color:#63776f;margin:1rem 0 0}.badge.gce-mock{background:#fff2d0;color:#7b591a}.gce-pagination{display:flex;align-items:center;justify-content:center;gap:1rem;margin:1.5rem 0}.gce-result-count{margin:1rem 0}.gce-pagination button:disabled{cursor:default}.gce-library [data-gce-results]{scroll-margin-top:1rem}
+@media(max-width:1000px){.gce-paper-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.gce-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.gce-paper-grid,.gce-filters{grid-template-columns:1fr}.gce-library{padding:1rem}.gce-paper .primary{width:100%}.gce-pagination{gap:.6rem}.gce-pagination .secondary{padding:.65rem .8rem}}

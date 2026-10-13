@@ -45,7 +45,7 @@
       "destination": "/index.html"
     },
     {
-      "source": "/:page(about|departments|news|visits|calendar|gallery|textbooks|admissions|contact|verify|login|portal)",
+      "source": "/:page(about|departments|news|visits|calendar|gallery|textbooks|revision|admissions|contact|verify|login|portal)",
       "destination": "/index.html"
     },
     {
