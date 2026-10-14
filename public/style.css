@@ -265,3 +265,14 @@
 /* Per-class subject students */
 .subject-student-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.65rem;max-height:480px;overflow-y:auto;padding:.25rem}.subject-student{display:flex;align-items:center;gap:.8rem;padding:.75rem;background:#f3f7f4;border:1px solid #dce6df;border-radius:7px;margin:0;min-width:0}.subject-student[hidden]{display:none}.subject-student input{width:22px;min-height:22px;height:22px;margin:0;flex:0 0 22px;accent-color:#075b42}.subject-student span{min-width:0}.subject-student strong{overflow-wrap:anywhere}.subject-student small{display:block;color:#63776f}.subject-group-count{padding:1rem;background:#e4f0e8;border-radius:7px;font-weight:700;margin:1rem 0}.subject-groups [hidden]{display:none!important}.subject-group-summary{margin:1rem 0}.subject-group-summary p{margin:.5rem 0 1rem;color:#63776f}
 @media(max-width:600px){.subject-student-grid{grid-template-columns:1fr}.subject-groups .actions .secondary{width:100%}}
+
+/* One complete student report per A4 sheet, for term and annual results. */
+#print-content .report-card{position:relative;width:210mm;min-width:210mm;height:297mm;min-height:297mm;max-height:297mm;padding:8mm;overflow:hidden;box-sizing:border-box;--rc-fit-scale:1}
+.report-card .rc-page-content{position:relative;width:100%;zoom:var(--rc-fit-scale);display:flow-root}
+.report-card .rc-page-content .rc-title-block{padding:2mm 0}.report-card .rc-page-content .rc-identity{margin-bottom:2mm}.report-card .rc-page-content .rc-marks td{padding:2px 3px}.report-card .rc-page-content .rc-marks th{padding:3px}.report-card .rc-page-content .rc-foot{margin-top:2mm;gap:2mm}.report-card .rc-page-content .rc-h{padding:3px}.report-card .rc-page-content .rc-box td{padding:2px 4px}.report-card .rc-page-content .rc-key{margin-top:2mm}.report-card .rc-page-content .rc-sign{margin-top:2mm}.report-card .rc-page-content .rc-sign td{height:13mm}.report-card .rc-page-content .rc-note{margin-top:2mm}
+@media print{
+ @page school-report{size:A4 portrait;margin:8mm}
+ #print-content .report-card{page:school-report;width:194mm;min-width:0;height:280mm;min-height:280mm;max-height:280mm;padding:0;margin:0;break-inside:avoid;break-after:page;box-shadow:none}
+ #print-content .report-card:last-child{break-after:auto}
+ .report-card .rc-page-content{break-inside:avoid}
+}

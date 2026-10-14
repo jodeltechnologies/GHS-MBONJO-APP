@@ -107,7 +107,7 @@ export function reportCardHTML(sheet,report,{year='',assessment='',cls='',teache
   ['Reprimand / Blâme',n.reprimand],
   ['Suspension / Exclusion temporaire',n.suspension],
   ['Dismissed / Exclusion définitive',n.dismissed]];
- const html=`<article class="print-page report-card report-${cba?'cba':'sba'}">
+ const html=`<article class="print-page report-card report-${cba?'cba':'sba'}"><div class="rc-page-content">
  ${reportLetterhead()}
  <div class="rc-title-block"><h2 class="rc-title">${report.sample?'BLANK SAMPLE / MODÈLE VIERGE · ':''}${esc(assessment).toUpperCase()} PROGRESS REPORT / BULLETIN DE NOTES</h2>
  <p class="rc-year">ACADEMIC YEAR / ANNÉE SCOLAIRE: ${esc(year)} <span>${cba?'CBA · COMPETENCE BASED':'SBA · SEQUENCE BASED'}</span></p></div>
@@ -147,7 +147,7 @@ export function reportCardHTML(sheet,report,{year='',assessment='',cls='',teache
  <table class="rc-sign"><thead><tr><th colspan="3">NAMES AND SIGNATURES / NOMS ET SIGNATURES</th></tr></thead>
  <tbody><tr><td>Class master / Maître de classe${signature(n.classMasterName)}</td><td>Principal / Proviseur${signature(n.principalName)}</td><td>Parent or guardian / Parent ou tuteur${signature(n.guardianName)}</td></tr></tbody></table>
  <p class="rc-note">-- means no published mark or information. Missing marks are excluded from averages and rankings. ${annual?'Annual marks average the available term averages. ':''}Absence hours and disciplinary observations are entered by the school.</p>
- </article>`;
+ </div></article>`;
  return report.sample?blankPrintHTML(html):html;
 }
 
