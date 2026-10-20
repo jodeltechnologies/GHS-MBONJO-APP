@@ -1,4 +1,5 @@
 import {academicYear} from './academics.js';
+import {teachesStudent} from './teaching-roster.js';
 import {requestingStaff} from './document-requests.js';
 import {studies} from './domain.js';
 export const admin=p=>['principal','vp'].includes(p.role);
@@ -30,7 +31,7 @@ export function canRead(p,r,all){const d=r.data;if(r.kind==='school_control')ret
  if(r.kind==='assignment')return p.role==='discipline'||d.teacherId===p.id;
  if(r.kind==='timetable')return d.status==='published';
  if(r.kind==='document')return d.profileId===p.id;
- if(r.kind==='student')return p.role==='discipline'||(teacher(p)&&assigned(p,d,all))||(p.role==='student'&&r.id===p.id)||(p.role==='parent'&&(p.children||[]).includes(r.id));
+ if(r.kind==='student')return p.role==='discipline'||(teacher(p)&&teachesStudent(p.id,r,all))||(p.role==='student'&&r.id===p.id)||(p.role==='parent'&&(p.children||[]).includes(r.id));
  if(r.kind==='resource')return (teacher(p)&&(d.ownerId===p.id||p.role==='hod'&&d.department===p.department))||(p.role==='student'&&d.class===p.class&&studies(p,d.subject)&&d.status==='published');
  if(['mark','attendance'].includes(r.kind))return (teacher(p)&&assigned(p,d,all))||(p.role==='discipline'&&r.kind==='attendance')||(p.role==='student'&&d.studentId===p.id&&(r.kind==='attendance'||d.status==='published'))||(p.role==='parent'&&(p.children||[]).includes(d.studentId)&&(r.kind==='attendance'||d.status==='published'));
  if(r.kind==='submission')return d.studentId===p.id||all.some(x=>x.kind==='resource'&&x.id===d.resourceId&&x.data.ownerId===p.id);

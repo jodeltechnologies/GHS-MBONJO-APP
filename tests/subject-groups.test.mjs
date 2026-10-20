@@ -5,6 +5,7 @@ import {studentsInYear,enrolment} from '../src/academics.js';
 import {studies} from '../src/domain.js';
 import {subjectGroupRoster,subjectGroupChange} from '../src/subject-groups.js';
 import {canRead} from '../src/access.js';
+import {teachingRoster} from '../src/teaching-roster.js';
 import {CONTROL_ID} from '../src/school-controls.js';
 import handler from '../api/school.js';
 const year='2025/2026',subject='Computer Science',cls='Form 1A';
@@ -102,7 +103,7 @@ test('server prevents marks and attendance for excluded students and resources a
 });
 test('marks and attendance requests refresh subject groups and student accounts receive only their own membership IDs',async()=>{
  const f=apiFixture();f.core[0].data=subjectGroupChange(f.core,f.core[0],{year,subject,mode:'selected',studentIds:ids,actor:'principal'});
- const marks=await f.call('teacher',{op:'marks',year,class:cls});assert.equal(marks.statusCode,200);assert.equal(marks.body.contextRows.filter(r=>r.kind==='student').length,52);assert.ok(marks.body.contextRows.some(r=>r.kind==='classroom'&&r.data.subjectGroups[year][subject].studentIds.length===12));
+ const marks=await f.call('teacher',{op:'marks',year,class:cls});assert.equal(marks.statusCode,200);assert.equal(marks.body.contextRows.filter(r=>r.kind==='student').length,12);assert.ok(marks.body.contextRows.some(r=>r.kind==='classroom'&&r.data.subjectGroups[year][subject].studentIds.length===12));
  const attendance=await f.call('teacher',{op:'attendance-register',assignmentId:'30000000-0000-4000-8000-000000000001',date:'2026-10-13'});assert.equal(attendance.statusCode,200);assert.ok(attendance.body.contextRows.some(r=>r.kind==='classroom'));
  const state=await f.call('student',{op:'state'},{studentId:ids[0]});const group=state.body.rows.find(r=>r.kind==='classroom').data.subjectGroups[year][subject];assert.deepEqual(group.studentIds,[ids[0]]);
 });
@@ -110,4 +111,30 @@ test('ordinary class edits preserve validated subject groups rather than accepti
  const f=apiFixture();f.core[0].data=subjectGroupChange(f.core,f.core[0],{year,subject,mode:'selected',studentIds:ids,actor:'principal'});
  const forged={...f.core[0].data,subjectGroups:{[year]:{[subject]:{mode:'all',studentIds:[]}}}};
  const edited=await f.call('principal',{op:'save',kind:'classroom',id:f.core[0].id,version:2,data:forged});assert.equal(edited.statusCode,200);assert.deepEqual(edited.body.row.data.subjectGroups[year][subject].studentIds,ids);
+});
+
+test('teacher class lists and API state contain only students taking an assigned subject',async()=>{
+ const f=apiFixture();f.core[0].data=subjectGroupChange(f.core,f.core[0],{year,subject,mode:'selected',studentIds:ids,actor:'principal'});
+ const state=await f.call('teacher',{op:'state'});
+ assert.deepEqual(state.body.rows.filter(r=>r.kind==='student').map(r=>r.id),ids);
+ const admin=await f.call('principal',{op:'state'});
+ assert.equal(admin.body.rows.filter(r=>r.kind==='student').length,52);
+ assert.equal(teachingRoster(f.core,{year,cls,teacherId:'actor',subject}).length,12);
+ f.core[0].data=subjectGroupChange(f.core,f.core[0],{year,subject,mode:'selected',studentIds:[],actor:'principal'});
+ assert.equal((await f.call('teacher',{op:'state'})).body.rows.filter(r=>r.kind==='student').length,0);
+});
+test('teachers with multiple subjects can select each roster without losing other subject students',()=>{
+ const rows=selectedRows();rows.push({kind:'assignment',data:{teacherId:'teacher',class:cls,subject,year}},{kind:'assignment',data:{teacherId:'teacher',class:cls,subject:'Mathematics',year}});
+ assert.equal(teachingRoster(rows,{teacherId:'teacher',year,cls}).length,52);
+ assert.equal(teachingRoster(rows,{teacherId:'teacher',year,cls,subject}).length,12);
+ assert.equal(teachingRoster(rows,{teacherId:'teacher',year,cls,subject:'Mathematics'}).length,52);
+ assert.equal(teachingRoster(rows,{teacherId:'stranger',year,cls}).length,0);
+ assert.equal(teachingRoster(rows,{teacherId:'teacher',year:'2026/2027',cls}).length,0);
+});
+test('a previous class assignment does not expose an excluded student after annual promotion',()=>{
+ const rows=selectedRows();rows.push({kind:'assignment',data:{teacherId:'teacher',class:cls,subject,year}});
+ for(const r of rows.filter(r=>r.kind==='student')){r.data.class='Form 2A';r.data.academicYear='2026/2027';r.data.enrolments['2026/2027']={class:'Form 2A',status:'active'};}
+ assert.equal(canRead({id:'teacher',role:'teacher'},rows[1],rows),true);
+ assert.equal(canRead({id:'teacher',role:'teacher'},rows[20],rows),false);
+ assert.equal(teachingRoster(rows,{teacherId:'teacher',year,cls,subject}).length,12);
 });
