@@ -61,7 +61,7 @@ export function canWrite(p,kind,d,old,all){
  if(p.role==='vp')return !['profile','document'].includes(kind);
  if(['event','post','gallery','textbook'].includes(kind))return (p.role==='content_creator'||p.contentCreator===true)&&(!old||old.data.ownerId===p.id);
  if(kind==='resource')return teacher(p)&&((!old||old.data.ownerId===p.id)&&assigned(p,d,all)||p.role==='hod'&&old?.data.department===p.department&&d.department===p.department);
- if(kind==='attendance'||kind==='mark')return teacher(p)&&assigned(p,d,all)||kind==='attendance'&&p.role==='discipline';
+ if(kind==='attendance'||kind==='mark')return teacher(p)&&assigned(p,d,all)&&(!old||assigned(p,old.data,all))&&(kind!=='mark'||old?.data.status!=='published')||kind==='attendance'&&p.role==='discipline';
  if(kind==='submission')return p.role==='student'&&(!old||old.data.studentId===p.id)&&all.some(r=>r.kind==='resource'&&r.id===d.resourceId&&r.data.class===p.class&&studies(p,r.data.subject)&&r.data.status==='published'&&r.data.submissionMode==='online')||teacher(p)&&old&&all.some(r=>r.kind==='resource'&&r.id===old.data.resourceId&&r.data.ownerId===p.id);
  return false;
 }
