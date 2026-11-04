@@ -16,7 +16,7 @@ export const assigned=(p,d,all)=>all.some(r=>{if(r.kind!=='assignment'||r.data.t
 // messages page rather than implying a privacy it cannot provide.
 export const sameDepartment=(p,d)=>!!p.department&&!!d.department&&p.department===d.department;
 export const inThread=(p,d)=>d.fromId===p.id||d.toId===p.id||(d.scope==='department'&&sameDepartment(p,d));
-export function canRead(p,r,all){const d=r.data;if(r.kind==='school_control')return true;
+export function canRead(p,r,all){const d=r.data;if(r.kind==='student'&&d.deleted)return admin(p);if(r.kind==='school_control')return true;
  if(r.kind==='message')return staff(p)&&inThread(p,d);
  if(r.kind==='dept_document')return staff(p)&&(sameDepartment(p,d)||(admin(p)&&d.transmitted===true));
  if(p.role==='principal')return true;

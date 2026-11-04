@@ -21,7 +21,7 @@ export function availableAcademicYears(records, current=academicYear()) {
  return [...years].sort().reverse();
 }
 export function studentsInYear(records, year) {
- return records.filter(r=>r.kind==='student').flatMap(r=>{
+ return records.filter(r=>r.kind==='student'&&!r.data.deleted).flatMap(r=>{
   const d=r.data,entry=d.enrolments?.[year];
   if(entry)return [{...r,data:enrolment({...d,...entry},records,year,r.id)}];
   const recorded=d.academicYear||d.sourceYear?.replace('-','/');

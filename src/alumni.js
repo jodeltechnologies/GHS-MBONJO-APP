@@ -2,7 +2,7 @@ const escape=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<'
 const searchable=value=>String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 
 export function alumniRoster(records,{year='',cls='',query=''}={}){
- return records.filter(r=>r.kind==='student'&&['graduated','completed'].includes(r.data.status)).map(r=>{
+ return records.filter(r=>r.kind==='student'&&!r.data.deleted&&['graduated','completed'].includes(r.data.status)).map(r=>{
   const d=r.data,completed=Object.entries(d.enrolments||{}).filter(([,e])=>['completed','graduated'].includes(e.status)).map(([y])=>y).sort().at(-1);
   const exitYear=d.exitYear||completed||d.academicYear||d.sourceYear?.replace('-','/')||'';
   return {...r,data:{...d,exitYear,formerClass:d.enrolments?.[exitYear]?.class||d.class||''}};
